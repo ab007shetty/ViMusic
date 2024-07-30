@@ -10,7 +10,7 @@ const port = 5000;
 app.use(cors());
 
 // Path to the database
-const dbPath = path.join(__dirname, '/database/vimusic.db');
+const dbPath = path.join(__dirname, '../database/vimusic.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database', err);
