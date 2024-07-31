@@ -1,18 +1,13 @@
+
 {
   "version": 2,
   "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
-    }
+    { "src": "api/**/*.js", "use": "@vercel/node" },
+    { "src": "src/index.html", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/songs", "dest": "/api/songs.js" },
     { "src": "/api/playlists", "dest": "/api/playlists.js" },
-    { "src": "/api/playlists/(?<playlistId>[^/]+)/songs", "dest": "/api/playlists/[playlistId]/songs.js" }
+    { "src": "/api/playlists/(.*)/songs", "dest": "/api/playlists_songs.js?playlistId=$1" }
   ]
 }
