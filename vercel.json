@@ -1,5 +1,18 @@
 {
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/api/songs", "dest": "/api/songs.js" },
+    { "src": "/api/playlists", "dest": "/api/playlists.js" },
+    { "src": "/api/playlists/(?<playlistId>[^/]+)/songs", "dest": "/api/playlists/[playlistId]/songs.js" }
   ]
 }
