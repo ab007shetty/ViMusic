@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Sidebar = ({ isOpen, onClose, onViewPlaylists, onViewMostPlayed, activeTab }) => {
+const Sidebar = ({ isOpen, onClose, onViewPlaylists, onViewMostPlayed, onViewFavorites, activeTab }) => {
   const handleFooterClick = () => {
     window.open('https://github.com/ab007shetty', '_blank');
   };
@@ -33,12 +33,20 @@ const Sidebar = ({ isOpen, onClose, onViewPlaylists, onViewMostPlayed, activeTab
           Most Played
         </button>
         <button 
-          className={`p-2 rounded w-full transition-colors duration-300 ${
+          className={`p-2 rounded w-full mb-2 transition-colors duration-300 ${
             activeTab === 'playlists' ? 'bg-gray-700 text-white border-l-4 border-blue-500' : 'bg-gray-800 hover:bg-gray-700'
           }`}
           onClick={onViewPlaylists}
         >
           My Playlists
+        </button>
+        <button 
+          className={`p-2 rounded w-full transition-colors duration-300 ${
+            activeTab === 'favorites' ? 'bg-gray-700 text-white border-l-4 border-blue-500' : 'bg-gray-800 hover:bg-gray-700'
+          }`}
+          onClick={onViewFavorites}
+        >
+          Favorites
         </button>
       </div>
       <div 

@@ -19,10 +19,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// API endpoint to fetch songs
+// API endpoint to Most played songs
 app.get('/api/songs', (req, res) => {
-// const sql = "SELECT * FROM song WHERE id = 'tBuxtUgmV9g'";
- const sql = "SELECT * FROM song WHERE likedAt IS NOT NULL AND totalPlayTimeMs <> 0";
+ const sql = "SELECT * FROM song WHERE totalPlayTimeMs IS NOT NULL ORDER BY totalPlayTimeMs DESC LIMIT 100";
 
   db.all(sql, [], (err, rows) => {
     if (err) {
@@ -49,15 +48,31 @@ app.get('/api/playlists', (req, res) => {
 // Fetch songs for a specific playlist
 app.get('/api/playlists/:playlistId/songs', (req, res) => {
   const { playlistId } = req.params;
+	const sql = `
+	  SELECT s.*
+	  FROM Song s
+	  INNER JOIN SongPlaylistMap spm ON s.id = spm.songId
+	  WHERE spm.playlistId = ?
+	  ORDER BY spm.position ASC
+	`;
+  db.all(sql, [playlistId], (err, rows) => {
+    if (err) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.json({ songs: rows });
+  });
+});
+
+// API endpoint to fetch favorite songs
+app.get('/api/favorites', (req, res) => {
   const sql = `
     SELECT * FROM Song
-    WHERE id IN (
-      SELECT songId
-      FROM SongPlaylistMap
-      WHERE playlistId = ?
-    )
+    WHERE likedAt IS NOT NULL
+    ORDER BY likedAt DESC
   `;
-  db.all(sql, [playlistId], (err, rows) => {
+
+  db.all(sql, [], (err, rows) => {
     if (err) {
       res.status(400).json({ error: err.message });
       return;

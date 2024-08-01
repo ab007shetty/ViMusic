@@ -31,21 +31,16 @@ const Player = ({ songId, onClose }) => {
 
   return (
     <div
-      className="card fixed truncate  rounded bottom-0 left-0 bg-gray-900 shadow-lg"
-      style={{
-        width: '238px',   // Width to fit below the sidebar
-        height: '350px',  // Height to fit below the sidebar
-        zIndex: 1000,     // Ensure it appears on top of other content
-        marginBottom: '70px', // Adjust based on sidebar width
-      }}
+      className="fixed bottom-0 left-0 bg-gray-900 shadow-lg rounded z-50 p-2 md:w-[238px] md:h-[350px] md:mb-[70px] w-full h-32 mb-0"
+      style={{ marginBottom: '0' }} // Ensure no margin on mobile
     >
       <div id="player" className="w-full h-full"></div>
       <button
-	  onClick={onClose}
-	  className="absolute top-2 right-2 text-white bg-red-500 w-8 h-8 flex items-center justify-center rounded"
-	>
-	  <span className="material-icons">close</span>
-	</button>
+        onClick={onClose}
+        className="absolute top-2 right-2 text-white bg-red-500 w-8 h-8 flex items-center justify-center rounded"
+      >
+        <span className="material-icons">close</span>
+      </button>
     </div>
   );
 };

@@ -18,8 +18,8 @@ const App = () => {
 
   const fetchSongs = async () => {
     try {
-// 	  const response = await fetch('http://localhost:5000/api/songs');
-      const response = await fetch('https://vimusic-server.up.railway.app/api/songs');
+ //     const response = await fetch('http://localhost:5000/api/songs');
+	  const response = await fetch('https://vimusic-server.up.railway.app/api/songs');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -29,14 +29,13 @@ const App = () => {
 
   const fetchPlaylists = async () => {
     try {
-//	  const response = await fetch('http://localhost:5000/api/playlists');
-      const response = await fetch('https://vimusic-server.up.railway.app/api/playlists');
+ //     const response = await fetch('http://localhost:5000/api/playlists');
+	  const response = await fetch('https://vimusic-server.up.railway.app/api/playlists');
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
       const data = await response.json();
       
-      // Add local image URLs to playlists
       const playlistsWithImages = data.playlists.map(playlist => {
         let imageUrl;
         switch (playlist.name) {
@@ -64,7 +63,6 @@ const App = () => {
 
       setPlaylists(playlistsWithImages);
 
-      // Set "High" as the default active playlist if it exists
       const highPlaylist = playlistsWithImages.find(playlist => playlist.name === 'High');
       if (highPlaylist) {
         setActivePlaylistId(highPlaylist.id);
@@ -78,8 +76,8 @@ const App = () => {
 
   const fetchSongsForPlaylist = async (playlistId) => {
     try {
-//	  const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
-      const response = await fetch(`https://vimusic-server.up.railway.app/api/playlists/${playlistId}/songs`);
+  //    const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
+	  const response = await fetch(`https://vimusic-server.up.railway.app/api/playlists/${playlistId}/songs`);
       const data = await response.json();
       setSelectedPlaylistSongs(data.songs);
     } catch (error) {
@@ -87,9 +85,26 @@ const App = () => {
     }
   };
 
+  const fetchFavorites = async () => {
+    try {
+  //    const response = await fetch('http://localhost:5000/api/favorites');
+	  const response = await fetch('https://vimusic-server.up.railway.app/api/favorites');
+      const data = await response.json();
+      setSongs(data.songs);
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  };
+
   useEffect(() => {
-    fetchSongs();
-  }, []);
+    if (activeTab === 'mostPlayed') {
+      fetchSongs();
+    } else if (activeTab === 'playlists') {
+      fetchPlaylists();
+    } else if (activeTab === 'favorites') {
+      fetchFavorites();
+    }
+  }, [activeTab]);
 
   const handlePlayClick = (songId) => {
     setPlayingSongId(songId);
@@ -121,17 +136,19 @@ const App = () => {
 
   const handleViewPlaylists = () => {
     setActiveTab('playlists');
-    fetchPlaylists();
   };
 
   const handleViewMostPlayed = () => {
     setActiveTab('mostPlayed');
-    fetchSongs(); // Fetch songs again to ensure the data is up-to-date
+  };
+
+  const handleViewFavorites = () => {
+    setActiveTab('favorites');
   };
 
   const handlePlaylistClick = (playlistId) => {
     fetchSongsForPlaylist(playlistId);
-    setActivePlaylistId(playlistId); // Set the clicked playlist as active
+    setActivePlaylistId(playlistId);
   };
 
   const displayedSongs = isSearching ? searchResults.map(result => ({
@@ -148,14 +165,14 @@ const App = () => {
         onClose={handleSidebarToggle} 
         onViewPlaylists={handleViewPlaylists}
         onViewMostPlayed={handleViewMostPlayed}
+        onViewFavorites={handleViewFavorites}
         activeTab={activeTab}
-        activePlaylistId={activePlaylistId} // Pass activePlaylistId to Sidebar
       />
       <div className="flex-1 flex flex-col">
         <Header onSearch={handleSearch} onClearSearch={handleClearSearch} onSidebarToggle={handleSidebarToggle} />
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">{isSearching ? 'Search Results' : activeTab === 'mostPlayed' ? 'Most Played' : 'Playlists'}</h2>
+            <h2 className="text-xl font-semibold">{isSearching ? 'Search Results' : activeTab === 'mostPlayed' ? 'Top 100 Most Played Tracks' : activeTab === 'playlists' ? 'Playlists' : 'Favorites'}</h2>
             {isSearching && (
               <button
                 onClick={handleClearSearch}
@@ -181,7 +198,7 @@ const App = () => {
                         key={playlist.id} 
                         playlist={playlist} 
                         onClick={() => handlePlaylistClick(playlist.id)} 
-                        isActive={playlist.id === activePlaylistId} // Pass active state
+                        isActive={playlist.id === activePlaylistId}
                       />
                     ))
                   ) : (
