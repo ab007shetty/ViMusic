@@ -21,7 +21,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // API endpoint to Most played songs
 app.get('/api/songs', (req, res) => {
- const sql = "SELECT * FROM song WHERE totalPlayTimeMs IS NOT NULL ORDER BY totalPlayTimeMs DESC LIMIT 100";
+ const sql = "SELECT * FROM song ORDER BY totalPlayTimeMs DESC LIMIT 100";
 
   db.all(sql, [], (err, rows) => {
     if (err) {

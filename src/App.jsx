@@ -19,7 +19,7 @@ const App = () => {
   const fetchSongs = async () => {
     try {
  //     const response = await fetch('http://localhost:5000/api/songs');
-	  const response = await fetch('https://vimusic-server.up.railway.app/api/songs');
+	  const response = await fetch('https://vimusic-server.glitch.me/api/songs');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -30,7 +30,7 @@ const App = () => {
   const fetchPlaylists = async () => {
     try {
  //     const response = await fetch('http://localhost:5000/api/playlists');
-	  const response = await fetch('https://vimusic-server.up.railway.app/api/playlists');
+	  const response = await fetch('https://vimusic-server.glitch.me/api/playlists');
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
@@ -77,7 +77,7 @@ const App = () => {
   const fetchSongsForPlaylist = async (playlistId) => {
     try {
   //    const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
-	  const response = await fetch(`https://vimusic-server.up.railway.app/api/playlists/${playlistId}/songs`);
+	  const response = await fetch(`https://vimusic-server.glitch.me/api/playlists/${playlistId}/songs`);
       const data = await response.json();
       setSelectedPlaylistSongs(data.songs);
     } catch (error) {
@@ -88,7 +88,7 @@ const App = () => {
   const fetchFavorites = async () => {
     try {
   //    const response = await fetch('http://localhost:5000/api/favorites');
-	  const response = await fetch('https://vimusic-server.up.railway.app/api/favorites');
+	  const response = await fetch('https://vimusic-server.glitch.me/api/favorites');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
