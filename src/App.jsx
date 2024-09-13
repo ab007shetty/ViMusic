@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import SongCard from './components/SongCard';
 import Player from './components/Player';
 import PlaylistCard from './components/PlaylistCard';
+
 
 const App = () => {
   const [songs, setSongs] = useState([]);
@@ -16,10 +18,13 @@ const App = () => {
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
 
+
+
+// =================================================================================================
+
   const fetchSongs = async () => {
     try {
- //     const response = await fetch('http://localhost:5000/api/songs');
-	  const response = await fetch('https://vimusic-server.glitch.me/api/songs');
+      const response = await fetch('http://localhost:5000/api/songs');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -29,8 +34,7 @@ const App = () => {
 
   const fetchPlaylists = async () => {
     try {
- //     const response = await fetch('http://localhost:5000/api/playlists');
-	  const response = await fetch('https://vimusic-server.glitch.me/api/playlists');
+      const response = await fetch('http://localhost:5000/api/playlists');
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
@@ -76,8 +80,7 @@ const App = () => {
 
   const fetchSongsForPlaylist = async (playlistId) => {
     try {
-  //    const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
-	  const response = await fetch(`https://vimusic-server.glitch.me/api/playlists/${playlistId}/songs`);
+      const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
       const data = await response.json();
       setSelectedPlaylistSongs(data.songs);
     } catch (error) {
@@ -87,8 +90,7 @@ const App = () => {
 
   const fetchFavorites = async () => {
     try {
-  //    const response = await fetch('http://localhost:5000/api/favorites');
-	  const response = await fetch('https://vimusic-server.glitch.me/api/favorites');
+      const response = await fetch('http://localhost:5000/api/favorites');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -157,6 +159,10 @@ const App = () => {
     artistsText: result.snippet.channelTitle,
     thumbnailUrl: result.snippet.thumbnails.high.url
   })) : songs;
+  
+
+
+//======================================================================================================
 
   return (
     <div className="flex h-screen bg-gray-900 text-white">
@@ -172,7 +178,9 @@ const App = () => {
         <Header onSearch={handleSearch} onClearSearch={handleClearSearch} onSidebarToggle={handleSidebarToggle} />
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">{isSearching ? 'Search Results' : activeTab === 'mostPlayed' ? 'Top 100 Most Played Tracks' : activeTab === 'playlists' ? 'Playlists' : 'Favorites'}</h2>
+            <h2 className="text-xl font-semibold">
+              {isSearching ? 'Search Results' : activeTab === 'mostPlayed' ? 'Top 100 Most Played Tracks' : activeTab === 'playlists' ? 'Playlists' : 'Favorites'}
+            </h2>
             {isSearching && (
               <button
                 onClick={handleClearSearch}

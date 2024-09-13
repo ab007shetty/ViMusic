@@ -23,5 +23,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-/database/vimusic.db-shm
-/database/vimusic.db-wal
+public/database/vimusic.db-shm
+public/database/vimusic.db-wal
+
+serviceAccountKey.json
+
+firebase.js

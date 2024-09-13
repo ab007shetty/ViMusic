@@ -45,7 +45,7 @@ const SongCard = ({ song, onPlayClick }) => {
 
       <div className="mt-2 text-white">
         <h3 className="text-lg font-semibold truncate">{song.title}</h3>
-        <p className="text-gray-400">{song.artistsText}</p>
+        <p className="text-gray-400 truncate">{song.artistsText}</p>
       </div>
     </div>
   );
