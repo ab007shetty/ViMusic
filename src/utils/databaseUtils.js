@@ -35,7 +35,8 @@ const uploadEmptyDatabase = async (userEmail) => {
 const triggerDatabaseDownloadOnServer = async (userEmail) => {
   try {
     // Call the server endpoint that downloads the user-specific database
-    const response = await axios.get(`http://localhost:5000/download-database/${userEmail}`);
+    //const response = await axios.get(`http://localhost:5000/download-database/${userEmail}`);
+	const response = await axios.get(`https://vimusic.up.railway.app/download-database/${userEmail}`);
     console.log('Server-side download triggered:', response.data);
   } catch (error) {
     console.error('Error triggering server-side database download:', error);

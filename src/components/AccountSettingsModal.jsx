@@ -64,7 +64,8 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
     if (user) {
       try {
         // Make a request to the server to delete the user's database
-        await axios.post(`http://localhost:5000/logout/${user.email}`);
+       // await axios.post(`http://localhost:5000/logout/${user.email}`);
+		await axios.post(`https://vimusic.up.railway.app/logout/${user.email}`);
         console.log('Logout successful and database deleted.');
 
         // Call the provided handleSignOut function
