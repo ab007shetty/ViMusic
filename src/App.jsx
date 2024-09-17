@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -19,12 +19,12 @@ const App = () => {
   const [searchResults, setSearchResults] = useState([]);
 
 
-
 // =================================================================================================
 
   const fetchSongs = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/songs');
+       //     const response = await fetch('http://localhost:5000/api/songs');
+	  const response = await fetch('https://vimusic.up.railway.app/api/songs');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -32,55 +32,69 @@ const App = () => {
     }
   };
 
-  const fetchPlaylists = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/playlists');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      
-      const playlistsWithImages = data.playlists.map(playlist => {
-        let imageUrl;
-        switch (playlist.name) {
-          case 'High':
-            imageUrl = '/images/high.jpeg';
-            break;
-          case 'Low':
-            imageUrl = '/images/low.jpeg';
-            break;
-          case 'Peace':
-            imageUrl = '/images/peace.jpeg';
-            break;
-          case 'Kannada':
-            imageUrl = '/images/kannada.jpg';
-            break;
-          case 'Beats':
-            imageUrl = '/images/beats.jpeg';
-            break;
-          default:
-            imageUrl = '/images/default.jpg'; // Fallback image if needed
-            break;
-        }
-        return { ...playlist, thumbnailUrl: imageUrl };
-      });
+ 
+	const fetchPlaylists = useCallback(async () => {
+	  try {
+		 //     const response = await fetch('http://localhost:5000/api/playlists');
+		  const response = await fetch('https://vimusic.up.railway.app/api/playlists');
+		if (!response.ok) {
+		  throw new Error('Network response was not ok');
+		}
+		const data = await response.json();
 
-      setPlaylists(playlistsWithImages);
+		const playlistsWithImages = data.playlists.map(playlist => {
+		  let imageUrl;
+		  switch (playlist.name) {
+			case 'High':
+			  imageUrl = '/images/high.jpeg';
+			  break;
+			case 'Low':
+			  imageUrl = '/images/low.jpeg';
+			  break;
+			case 'Peace':
+			  imageUrl = '/images/peace.jpeg';
+			  break;
+			case 'Kannada':
+			  imageUrl = '/images/kannada.jpg';
+			  break;
+			case 'Beats':
+			  imageUrl = '/images/beats.jpeg';
+			  break;
+			default:
+			  imageUrl = '/images/default.jpg'; // Fallback image if needed
+			  break;
+		  }
+		  return { ...playlist, thumbnailUrl: imageUrl };
+		});
 
-      const highPlaylist = playlistsWithImages.find(playlist => playlist.name === 'High');
-      if (highPlaylist) {
-        setActivePlaylistId(highPlaylist.id);
-        fetchSongsForPlaylist(highPlaylist.id);
-        setActiveTab('playlists');
-      }
-    } catch (error) {
-      console.error('Error fetching playlists:', error);
-    }
-  };
+		setPlaylists(playlistsWithImages);
+
+		const highPlaylist = playlistsWithImages.find(playlist => playlist.name === 'High');
+		if (highPlaylist) {
+		  setActivePlaylistId(highPlaylist.id);
+		  fetchSongsForPlaylist(highPlaylist.id);
+		  setActiveTab('playlists');
+		}
+	  } catch (error) {
+		console.error('Error fetching playlists:', error);
+	  }
+	}, []); // Memoize the function
+
+	useEffect(() => {
+	  if (activeTab === 'mostPlayed') {
+		fetchSongs();
+	  } else if (activeTab === 'playlists') {
+		fetchPlaylists();
+	  } else if (activeTab === 'favorites') {
+		fetchFavorites();
+	  }
+	}, [activeTab, fetchPlaylists]);
+
 
   const fetchSongsForPlaylist = async (playlistId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
+      //    const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
+	  const response = await fetch(`https://vimusic.up.railway.app/api/playlists/${playlistId}/songs`);
       const data = await response.json();
       setSelectedPlaylistSongs(data.songs);
     } catch (error) {
@@ -90,7 +104,8 @@ const App = () => {
 
   const fetchFavorites = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/favorites');
+       //    const response = await fetch('http://localhost:5000/api/favorites');
+	  const response = await fetch('https://vimusic.up.railway.app/api/favorites');
       const data = await response.json();
       setSongs(data.songs);
     } catch (error) {
@@ -116,16 +131,19 @@ const App = () => {
     setPlayingSongId(null);
   };
 
-  const handleSearch = async (query) => {
-    setIsSearching(true);
-    try {
-      const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&key=${process.env.REACT_APP_YOUTUBE_API_KEY}`);
-      const data = await response.json();
-      setSearchResults(data.items);
-    } catch (error) {
-      console.error('Error searching for songs:', error);
-    }
-  };
+	const handleSearch = async (query) => {
+	  setIsSearching(true);
+	  try {
+		const response = await fetch(
+		  `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&maxResults=10&key=${process.env.REACT_APP_YOUTUBE_API_KEY}`
+		);
+		const data = await response.json();
+		setSearchResults(data.items);
+	  } catch (error) {
+		console.error('Error searching for songs:', error);
+	  }
+	};
+
 
   const handleClearSearch = () => {
     setIsSearching(false);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { handleDatabaseImport } from '../utils/databaseUtils'; // Import the function
 import axios from 'axios'; // Make sure axios is imported
 
