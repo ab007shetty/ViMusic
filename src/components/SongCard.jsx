@@ -45,7 +45,8 @@ const SongCard = ({
     useEffect(() => {
         const fetchPlaylists = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/playlists');
+               // const response = await fetch('http://localhost:5000/api/playlists');
+				const response = await fetch('https://vimusic.up.railway.app/api/playlists');
                 if (!response.ok) {
                     throw new Error('Failed to fetch playlists');
                 }
@@ -63,7 +64,8 @@ const SongCard = ({
     const handleFavoriteToggle = async () => {
         const songData = prepareSongData(); // Prepare the song data
         try {
-            const response = await fetch(`http://localhost:5000/api/songs/${song.id}/favorite`, {
+           // const response = await fetch(`http://localhost:5000/api/songs/${song.id}/favorite`, {
+				const response = await fetch(`https://vimusic.up.railway.app/api/songs/${song.id}/favorite`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -98,7 +100,8 @@ const onAddToPlaylist = async (songId, playlistId) => {
         // Debugging log to ensure we're passing the correct values
         console.log('Adding song to playlist with:', { songId, playlistId });
 
-        const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs/${songId}`, {
+        //const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs/${songId}`, {
+			const response = await fetch(`https://vimusic.up.railway.app/api/playlists/${playlistId}/songs/${songId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
