@@ -215,6 +215,129 @@ server.get('/api/favorites', (req, res) => {
   });
 });
 
+
+// Add song to favorite
+server.put('/api/songs/:songId/favorite', (req, res) => {
+  const { songId } = req.params;
+
+  // Check if the song already exists in the database
+  const sqlCheck = 'SELECT * FROM Song WHERE id = ?';
+
+  dbConnection.get(sqlCheck, [songId], (err, row) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    if (row) {
+      // If the song exists, toggle favorite status
+      if (row.likedAt === null) {
+        // Add to favorites
+        const sqlUpdateFavorite = 'UPDATE Song SET likedAt = ? WHERE id = ?';
+        dbConnection.run(sqlUpdateFavorite, [Date.now(), songId], (updateErr) => {
+          if (updateErr) {
+            return res.status(400).json({ error: updateErr.message });
+          }
+          return res.json({ message: 'Added to favorites.', favorite: true });
+        });
+      } else {
+        // Remove from favorites
+        const sqlRemoveFavorite = 'UPDATE Song SET likedAt = NULL WHERE id = ?';
+        dbConnection.run(sqlRemoveFavorite, [songId], (removeErr) => {
+          if (removeErr) {
+            return res.status(400).json({ error: removeErr.message });
+          }
+          return res.json({ message: 'Removed from favorites.', favorite: false });
+        });
+      }
+    } else {
+      // If the song doesn't exist, insert it first with the details from req.body
+      const sqlInsert = `
+        INSERT INTO Song (id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`;
+
+      // Destructure song details from the request body without default values
+      const { 
+        title, 
+        artistsText, 
+        durationText, 
+        thumbnailUrl, 
+        totalPlayTimeMs 
+      } = req.body;
+
+      // Insert the song into the database with its details, setting likedAt to the current time
+      dbConnection.run(sqlInsert, [songId, title, artistsText, durationText, thumbnailUrl, Date.now(), totalPlayTimeMs], (insertErr) => {
+        if (insertErr) {
+          return res.status(400).json({ error: insertErr.message });
+        }
+        return res.json({ message: 'Song added to favorites and database.', favorite: true });
+      });
+    }
+  });
+});
+
+
+/// Add song to a specific playlist
+server.post('/api/playlists/:playlistId/songs/:songId', (req, res) => {
+    const { playlistId, songId } = req.params;
+    const { title, artistsText, durationText, thumbnailUrl, totalPlayTimeMs } = req.body;
+
+    // Check if the song already exists in the database
+    const sqlCheck = 'SELECT * FROM Song WHERE id = ?';
+    dbConnection.get(sqlCheck, [songId], (err, row) => {
+        if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+
+        // If the song doesn't exist, insert it first
+        if (!row) {
+            const sqlInsert = `
+                INSERT INTO Song (id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`;
+
+            dbConnection.run(sqlInsert, [songId, title, artistsText, durationText, thumbnailUrl, Date.now(), totalPlayTimeMs], (insertErr) => {
+                if (insertErr) {
+                    return res.status(400).json({ error: insertErr.message });
+                }
+
+                // After inserting the song, continue to add it to the playlist
+                addToPlaylist(playlistId, songId, res);
+            });
+        } else {
+            // If the song already exists, directly add it to the playlist
+            addToPlaylist(playlistId, songId, res);
+        }
+    });
+});
+
+// Function to add song to playlist after checking its existence
+function addToPlaylist(playlistId, songId, res) {
+    // SQL query to fetch the current maximum position for the playlist
+    const sql = 'SELECT MAX(position) AS maxPosition FROM SongPlaylistMap WHERE playlistId = ?';
+
+    dbConnection.get(sql, [playlistId], (err, result) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to fetch max position' });
+        }
+
+        // Determine the new position; if result is null or maxPosition is undefined, start from 0
+        const maxPosition = result && result.maxPosition !== null ? result.maxPosition : 0;
+        const newPosition = maxPosition + 1;
+
+        // Insert into the SongPlaylistMap table
+        const sqlInsertMap = 'INSERT INTO SongPlaylistMap (songId, playlistId, position) VALUES (?, ?, ?)';
+        dbConnection.run(sqlInsertMap, [songId, playlistId, newPosition], (mapErr) => {
+            if (mapErr) {
+                return res.status(500).json({ error: 'Failed to add song to playlist' });
+            }
+
+            // Respond with success after the song has been added to the playlist
+            return res.status(201).json({ message: 'Song added to playlist successfully', songId, playlistId, position: newPosition });
+        });
+    });
+}
+
+
+
 // Serve static files (for your frontend)
 server.use(express.static(path.join(__dirname, 'public')));
 
