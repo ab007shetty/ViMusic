@@ -38,44 +38,27 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
     }
   };
 
-const handleExport = async () => {
-  if (user) {
-    try {
-      // Assuming the database is stored in the 'public/database' folder on the server
-      const localFilePath = `${process.env.PUBLIC_URL}/database/${user.email}.db`;
-
-      // Fetch the file from the server
-      const response = await fetch(localFilePath);
-
-      if (!response.ok) {
-        throw new Error(`Error fetching the database file for ${user.email}`);
+  const handleExport = async () => {
+    if (user) {
+      try {
+        const fileRef = ref(storage, `databases/${user.email}.db`);
+        const url = await getDownloadURL(fileRef);
+        
+        // Create a link element to trigger the download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${user.email}.db`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('Error retrieving file URL:', error);
+        alert('Error retrieving file');
       }
-
-      // Convert the response to a blob
-      const blob = await response.blob();
-
-      // Create a link element to trigger the download
-      const a = document.createElement('a');
-      const url = window.URL.createObjectURL(blob); // Create a URL for the blob
-      a.href = url;
-      a.download = `${user.email}.db`; // Set the downloaded file name
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      // Clean up the URL object
-      window.URL.revokeObjectURL(url);
-
-      console.log('User database exported successfully');
-    } catch (error) {
-      console.error('Error exporting the user database:', error);
-      alert('Error exporting the user database');
+    } else {
+      alert('User not authenticated');
     }
-  } else {
-    alert('User not authenticated');
-  }
-};
-
+  };
 
   const handleSignOutClick = async () => {
     if (user) {
