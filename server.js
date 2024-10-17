@@ -9,6 +9,7 @@ import admin from 'firebase-admin';
 import { getApps, initializeApp as adminInitializeApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 
+
 // Resolve __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -91,10 +92,38 @@ const downloadDatabaseToServer = async (userEmail) => {
   }
 };
 
+// Function to upload the user's database to Firebase Storage before logout
+const uploadDatabaseBeforeLogout = async (userEmail) => {
+  try {
+    // Construct the path to the local user database in the 'public/database' folder
+    const userDatabasePath = path.join(__dirname, 'public', 'database', `${userEmail}.db`);
+
+    console.log(`Checking if user database exists at path: ${userDatabasePath}`);
+
+    // Check if the file exists
+    if (!fs.existsSync(userDatabasePath)) {
+      throw new Error(`User database file does not exist locally for ${userEmail}`);
+    }
+
+    console.log('User database found locally, preparing to upload...');
+
+    // Read the file as a buffer
+    const fileBuffer = fs.readFileSync(userDatabasePath);
+
+    // Upload the file to Firebase Storage
+    const userDatabaseRef = bucket.file(`databases/${userEmail}.db`);
+    await userDatabaseRef.save(fileBuffer);
+    console.log('User database uploaded successfully for:', userEmail);
+  } catch (error) {
+    console.error('Error uploading user database:', error.message);
+    throw error;
+  }
+};
+
 // ROUTES BEGIN ========================================================================================================
 
 // Route to trigger the database download for a user
-server.get('/download-database/:email', async (req, res) => {
+server.get('/api/download-database/:email', async (req, res) => {
   const userEmail = req.params.email;
   
   // Call the function to download and save the database file
@@ -103,50 +132,58 @@ server.get('/download-database/:email', async (req, res) => {
   res.send('Database download initiated.');
 });
 
-// Route to delete the user's database file after sign-out
-server.post('/logout/:email', async (req, res) => {
+server.post('/api/logout/:email', async (req, res) => {
   const userEmail = req.params.email;
   const filePath = path.join(__dirname, 'public', 'database', `${userEmail}.db`);
 
   try {
     // Close the user-specific database connection first
     if (dbConnection) {
-      dbConnection.close((err) => {
-        if (err) {
-          console.error('Error closing database connection:', err);
-          return res.status(500).send('Error closing database connection.');
+      await new Promise((resolve, reject) => {
+        dbConnection.close((err) => {
+          if (err) {
+            console.error('Error closing database connection:', err);
+            return reject('Error closing database connection.');
+          }
+          console.log('Database connection closed successfully.');
+          resolve();
+        });
+      });
+
+      // Now switch back to the default guest database
+      dbConnection = getDatabaseConnection();
+      console.log('Switched back to the default guest database.');
+
+      // Upload the user's database to Firebase before deletion
+      try {
+        await uploadDatabaseBeforeLogout(userEmail);
+        console.log('User database uploaded successfully.');
+      } catch (error) {
+        console.error('Error uploading database:', error);
+        return res.status(500).send('Error uploading database: ' + error.message);
+      }
+
+      // Ensure the file is deleted after upload
+      try {
+        const fileExists = await fs.promises.stat(filePath).catch(() => false); // Check if file exists
+        if (fileExists) {
+          await fs.promises.unlink(filePath); // Async delete
+          console.log(`Database file ${filePath} deleted successfully.`);
+        } else {
+          console.log(`Database file ${filePath} not found.`);
         }
 
-        console.log('Database connection closed successfully.');
-
-        // Add a small delay to ensure the file is released properly
-        setTimeout(() => {
-          // Now attempt to delete the database file
-          if (fs.existsSync(filePath)) {
-            try {
-              fs.unlinkSync(filePath); // Delete the file
-              console.log(`Database file ${filePath} deleted.`);
-            } catch (unlinkError) {
-              console.error('Error deleting database file:', unlinkError);
-              return res.status(500).send('Error deleting database file.');
-            }
-          } else {
-            console.log(`Database file ${filePath} not found.`);
-          }
-
-          // Reset the connection to the default guest database
-          dbConnection = getDatabaseConnection();
-          console.log('Switched back to the default guest database.');
-
-          res.send('User signed out and database deleted.');
-        }, 500); // Delay of 500ms to ensure file is released
-      });
+        res.status(200).send('User logged out, database uploaded and deleted.');
+      } catch (error) {
+        console.error('Error deleting user database file:', error);
+        res.status(500).send('Error deleting user database file: ' + error.message);
+      }
     } else {
-      res.status(500).send('No database connection found.');
+      res.status(500).send('No active database connection found.');
     }
   } catch (error) {
     console.error('Error during logout process:', error);
-    res.status(500).send('Error during logout process.');
+    res.status(500).send('Error during logout process: ' + error.message);
   }
 });
 

@@ -1,10 +1,6 @@
 # ViMusic
 Web-based solution for open-source Android-based music player - ViMusic. It uses the same database as theirs.
 
-## Prerequisites
-
-1. node.js https://nodejs.org/dist/v14.17.0/node-v14.17.0-x64.msi
-
 ## Installation
 
 1. Clone the repository and Extract It.
@@ -15,12 +11,16 @@ Web-based solution for open-source Android-based music player - ViMusic. It uses
    npm install      
    ```
 
-3. Change Live server URL's from App.jsx, SongCard.jsx, AccountSettingsModal.jsx, databaseUtils.js.
+3. Change Live server URL's in AccountSettingsModal.jsx and databaseUtils.js.
 
-4. Create a .env file in root directory and Youtube V3 Data APi in the format, REACT_APP_YOUTUBE_API_KEY=xxxxxxxxxxxxxxxxxxx
+4. Create serviceAccountKey.json file in root directory and add Firebase service account Keys.
 
-5. Create serviceAccountKey.json file in root directory and add Firebase service account Keys
+5. Create a .env file in root directory and below key/values.
 
+	```sh
+	REACT_APP_YOUTUBE_API_KEY=AIzaxxxxxxxxxxxxxxxxxx
+	REACT_APP_LOCAL_SERVER_URL=http://localhost:5000/api
+	REACT_APP_LIVE_SERVER_URL=https://vimusic.up.railway.app/api   ```
 
 ## Execution
 

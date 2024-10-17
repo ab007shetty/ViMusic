@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import SongCard from './components/SongCard';
 import Player from './components/Player';
 import PlaylistCard from './components/PlaylistCard';
+import { fetchFromServer } from './utils/api';
 
 const App = () => {
   const [songs, setSongs] = useState([]);
@@ -16,7 +17,6 @@ const App = () => {
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
-
 
   // Retrieve the saved active tab from local storage
   useEffect(() => {
@@ -31,30 +31,40 @@ const App = () => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
-
-// =================================================================================================
-
-  // Fetch songs from the API
-  const fetchSongs = async () => {
+  // Fetch songs function wrapped in useCallback
+  const fetchSongs = useCallback(async () => {
     try {
-      //     const response = await fetch('http://localhost:5000/api/songs');
-	  const response = await fetch('https://vimusic.up.railway.app/api/songs');
-      const data = await response.json();
+      const data = await fetchFromServer('songs');
       setSongs(data.songs);
     } catch (error) {
       console.error('Error fetching songs:', error);
     }
-  };
+  }, []);
+
+  // Fetch favorite songs function wrapped in useCallback
+  const fetchFavorites = useCallback(async () => {
+    try {
+      const data = await fetchFromServer('favorites');
+      setSongs(data.songs);
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  }, []);
+
+  // Fetch songs for a specific playlist
+  const fetchSongsForPlaylist = useCallback(async (playlistId) => {
+    try {
+      const data = await fetchFromServer(`playlists/${playlistId}/songs`);
+      setSelectedPlaylistSongs(data.songs);
+    } catch (error) {
+      console.error('Error fetching songs for playlist:', error);
+    }
+  }, []);
 
   // Fetch playlists from the API
   const fetchPlaylists = useCallback(async () => {
     try {
-       //     const response = await fetch('http://localhost:5000/api/playlists');
-		  const response = await fetch('https://vimusic.up.railway.app/api/playlists');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
+      const data = await fetchFromServer('playlists');
 
       const playlistsWithImages = data.playlists.map((playlist) => {
         let imageUrl;
@@ -75,7 +85,7 @@ const App = () => {
             imageUrl = '/images/beats.jpeg';
             break;
           default:
-            imageUrl = '/images/default.jpg'; // Fallback image if needed
+            imageUrl = '/images/default.jpg';
             break;
         }
         return { ...playlist, thumbnailUrl: imageUrl };
@@ -94,44 +104,23 @@ const App = () => {
     } catch (error) {
       console.error('Error fetching playlists:', error);
     }
-  }, []); // Memoize the function
+  }, [fetchSongsForPlaylist]);
 
+  // useEffect to trigger fetchPlaylists based on activeTab
   useEffect(() => {
     if (activeTab === 'mostPlayed') {
-      fetchSongs();
+      fetchSongs(); // Call fetchSongs when mostPlayed tab is active
     } else if (activeTab === 'playlists') {
-      fetchPlaylists();
+      fetchPlaylists(); // Call fetchPlaylists when playlists tab is active
     } else if (activeTab === 'favorites') {
-      fetchFavorites();
+      fetchFavorites(); // Call fetchFavorites when favorites tab is active
     }
-  }, [activeTab, fetchPlaylists]);
+  }, [activeTab, fetchPlaylists, fetchFavorites, fetchSongs]);
 
-  // Fetch songs for a specific playlist
-  const fetchSongsForPlaylist = async (playlistId) => {
-    try {
-		//    const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/songs`);
-	  const response = await fetch(`https://vimusic.up.railway.app/api/playlists/${playlistId}/songs`);
 
-      const data = await response.json();
-      setSelectedPlaylistSongs(data.songs);
-    } catch (error) {
-      console.error('Error fetching songs for playlist:', error);
-    }
-  };
+//===============================================================================================================================================================
 
-  // Fetch favorite songs
-  const fetchFavorites = async () => {
-    try {
-      //    const response = await fetch('http://localhost:5000/api/favorites');
-	  const response = await fetch('https://vimusic.up.railway.app/api/favorites');
-      const data = await response.json();
-      setSongs(data.songs);
-    } catch (error) {
-      console.error('Error fetching favorites:', error);
-    }
-  };
-
-  // Handle play button click
+ // Handle play button click
   const handlePlayClick = (songId) => {
     setPlayingSongId(songId);
   };
@@ -173,36 +162,19 @@ const App = () => {
     setActivePlaylistId(playlistId);
   };
   
-// Handle search
-const handleSearch = async (query) => {
-  setIsSearching(true);
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&videoCategoryId=10&maxResults=10&key=${process.env.REACT_APP_YOUTUBE_API_KEY}`
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.log('API Error Data:', errorData); // Log the error response for diagnosis
-      if (errorData.error && errorData.error.code === 403) {
-        // Display custom message for quota exceeded
-        alert('YouTube API quota exceeded. Please try again later.');
-        return; // Exit the function
-      } else {
-        throw new Error(`Error: ${errorData.error.message}`);
-      }
+    // Handle search
+  const handleSearch = async (query) => {
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&maxResults=10&videoCategoryId=10&key=${process.env.REACT_APP_YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      setSearchResults(data.items);
+    } catch (error) {
+      console.error('Error searching for songs:', error);
     }
-
-    const data = await response.json();
-    setSearchResults(data.items);
-  } catch (error) {
-    console.error('Error searching for songs:', error.message || error);
-    alert('An error occurred while searching for songs. Please try again.');
-  } finally {
-    setIsSearching(false);
-  }
-};
-
+  };
 
   // Toggle favorite songs
   const toggleFavorite = (songId) => {
@@ -224,6 +196,8 @@ const handleSearch = async (query) => {
         thumbnailUrl: result.snippet.thumbnails.high.url,
       }))
     : songs;
+
+  //======================================================================================================
 
   return (
     <div className="flex h-screen bg-gray-900 text-white">
@@ -320,12 +294,7 @@ const handleSearch = async (query) => {
             )}
           </div>
         </div>
-        {playingSongId && (
-          <Player
-            songId={playingSongId}
-            onClose={handleClosePlayer}
-          />
-        )}
+        {playingSongId && <Player songId={playingSongId} onClose={handleClosePlayer} />}
       </div>
     </div>
   );
