@@ -374,7 +374,7 @@ const App = () => {
       }}
     />
       
-      <div className="flex h-screen bg-gray-900 text-white overflow-hidden lg:-ml-3">
+      <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
         <Header
           onSearch={handleSearch}
           onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
