@@ -172,13 +172,14 @@ const attachDatabase = (req, res, next) => {
   next();
 };
 
-// Apply middleware to all API routes except login/logout/health
+// Apply middleware to all API routes except login/logout/health/import
 app.use((req, res, next) => {
   // Skip middleware for these endpoints
   if (
     req.path.startsWith("/api/login") ||
     req.path.startsWith("/api/logout") ||
     req.path.startsWith("/api/sync-database") ||
+    req.path.startsWith("/api/import-database") ||
     req.path === "/api/health"
   ) {
     return next();
@@ -251,6 +252,7 @@ const ensureUserDatabase = async (userEmail) => {
         .from(STORAGE_BUCKET)
         .upload(remotePath, fileBuffer, {
           contentType: "application/x-sqlite3",
+          cacheControl: "0",
           upsert: false,
         });
 
@@ -326,6 +328,7 @@ app.post("/api/sync-database/:email", async (req, res) => {
       .from(STORAGE_BUCKET)
       .update(remotePath, fileBuffer, {
         contentType: "application/x-sqlite3",
+        cacheControl: "0",
         upsert: true,
       });
 
@@ -339,6 +342,84 @@ app.post("/api/sync-database/:email", async (req, res) => {
   } catch (err) {
     console.error("❌ Sync failed:", err.message);
     res.status(500).json({ error: "Failed to sync database" });
+  }
+});
+
+// Import database from Supabase Storage - SINGLE ENDPOINT
+app.post("/api/import-database/:email", async (req, res) => {
+  const email = req.params.email;
+  const username = email.split("@")[0];
+  const localPath = path.join(DB_DIR, `${username}.db`);
+  const remotePath = `${username}.db`;
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`📥 IMPORT DATABASE: ${email}`);
+  console.log(`☁️ Remote: ${remotePath}`);
+  console.log(`📁 Local: ${localPath}`);
+  console.log(`${"=".repeat(60)}\n`);
+
+  try {
+    // Step 1: Download latest from Supabase with timestamp to bypass cache
+    console.log(`📥 Downloading fresh database from Supabase...`);
+    const timestamp = Date.now();
+    const { data, error: downloadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .download(`${remotePath}?t=${timestamp}`);
+
+    if (downloadError) {
+      console.error("❌ Download error:", downloadError);
+      return res.status(404).json({
+        error: "Database not found in cloud storage",
+        details: downloadError.message,
+      });
+    }
+
+    // Step 2: Delete old local database if exists
+    if (fs.existsSync(localPath)) {
+      try {
+        fs.unlinkSync(localPath);
+        console.log("🗑️ Deleted old local database");
+      } catch (unlinkError) {
+        console.error("⚠️ Error deleting old database:", unlinkError.message);
+      }
+    }
+
+    // Step 3: Save new database
+    const arrayBuffer = await data.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(localPath, buffer);
+    console.log("💾 Saved new database locally");
+
+    // Step 4: Verify the new database can be opened
+    try {
+      const testDb = new Database(localPath, { readonly: true });
+      testDb.close();
+      console.log("✅ Verified new database is valid");
+    } catch (verifyError) {
+      console.error("❌ New database is corrupted:", verifyError.message);
+      if (fs.existsSync(localPath)) {
+        fs.unlinkSync(localPath);
+      }
+      return res.status(500).json({
+        error: "Downloaded database is corrupted",
+        details: verifyError.message,
+      });
+    }
+
+    console.log(`✅ Import completed successfully for ${username}\n`);
+
+    res.json({
+      success: true,
+      message: "Database imported successfully",
+      user: email,
+      requiresRefresh: true,
+    });
+  } catch (err) {
+    console.error("❌ Import failed:", err);
+    res.status(500).json({
+      error: "Failed to import database",
+      details: err.message,
+    });
   }
 });
 
@@ -361,6 +442,7 @@ app.post("/api/logout/:email", async (req, res) => {
         .from(STORAGE_BUCKET)
         .update(remotePath, fileBuffer, {
           contentType: "application/x-sqlite3",
+          cacheControl: "0",
           upsert: true,
         });
 
