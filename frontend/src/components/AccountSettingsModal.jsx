@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { handleDatabaseImport, getDatabaseDownloadUrl, syncDatabaseToCloud } from '../utils/databaseUtils';
+import { setUserEmail } from '../utils/api';
 
 const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -124,6 +125,9 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
       // Sync database to cloud before signing out
       await syncDatabaseToCloud(user.email);
       console.log('✅ Database synced to cloud');
+      
+      // CRITICAL: Clear user email from API service
+      setUserEmail(null);
       
       // Sign out from Supabase
       await handleSignOut();

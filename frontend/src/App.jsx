@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlayerProvider } from './contexts/PlayerContext';
-import { fetchFromServer } from './utils/api';
-import { Loader, X } from 'lucide-react';
+import { fetchFromServer, setUserEmail, getUserEmail } from './utils/api';
+import { Loader, X, Plus } from 'lucide-react';
 import { supabase } from './supabase';
 import { switchToUserDatabase } from './utils/databaseUtils';
 import toast, { Toaster } from 'react-hot-toast';
@@ -12,6 +12,7 @@ import SongCard from './components/SongCard';
 import Player from './components/Player';
 import PlaylistCard from './components/PlaylistCard';
 import SortFilter from './components/SortFilter';
+import { CreatePlaylistModal, EditPlaylistModal, DeletePlaylistModal } from './components/PlaylistModals';
 
 const App = () => {
   const [songs, setSongs] = useState([]);
@@ -27,6 +28,12 @@ const App = () => {
   const [sortOrder, setSortOrder] = useState('desc');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Playlist modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
 
   // Sidebar closed on mobile by default
   useEffect(() => {
@@ -117,6 +124,80 @@ const App = () => {
     }
   }, [fetchSongsForPlaylist]);
 
+  // Playlist Management Functions
+  const handleCreatePlaylist = async (playlistName) => {
+    try {
+      console.log('Creating playlist:', playlistName);
+      
+      const response = await fetchFromServer('playlists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: playlistName }),
+      });
+      
+      console.log('Playlist created:', response);
+      toast.success(`Playlist "${playlistName}" created!`);
+      await fetchPlaylists(); // Refresh playlists
+      
+      return response;
+    } catch (error) {
+      console.error('Error creating playlist:', error);
+      toast.error(error.message || 'Failed to create playlist');
+      throw error;
+    }
+  };
+
+  const handleEditPlaylist = async (playlistId, newName) => {
+    try {
+      await fetchFromServer(`playlists/${playlistId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: newName }),
+      });
+      
+      toast.success('Playlist updated!');
+      await fetchPlaylists(); // Refresh playlists
+    } catch (error) {
+      console.error('Error updating playlist:', error);
+      toast.error('Failed to update playlist');
+      throw error;
+    }
+  };
+
+  const handleDeletePlaylist = async (playlistId) => {
+    try {
+      await fetchFromServer(`playlists/${playlistId}`, {
+        method: 'DELETE',
+      });
+      
+      toast.success('Playlist deleted!');
+      
+      // If deleted playlist was active, clear selection
+      if (activePlaylistId === playlistId) {
+        setActivePlaylistId(null);
+        setSelectedPlaylistSongs([]);
+      }
+      
+      await fetchPlaylists(); // Refresh playlists
+    } catch (error) {
+      console.error('Error deleting playlist:', error);
+      toast.error('Failed to delete playlist');
+      throw error;
+    }
+  };
+
+  // Modal handlers
+  const openEditModal = (playlist) => {
+    setSelectedPlaylist(playlist);
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (playlist) => {
+    setSelectedPlaylist(playlist);
+    setShowDeleteModal(true);
+  };
+
   // Refresh current view
   const refreshCurrentView = useCallback(() => {
     if (activeTab === 'mostPlayed') {
@@ -133,56 +214,48 @@ const App = () => {
     refreshCurrentView();
   }, [refreshCurrentView]);
 
-  // Auto-switch database when user logs in with Supabase
+  // Initialize: Check for existing session and restore user email
   useEffect(() => {
-    let isProcessingAuth = false;
+    const initializeApp = async () => {
+      const storedEmail = getUserEmail();
+      
+      if (storedEmail) {
+        console.log('📍 Restoring session for:', storedEmail);
+      }
 
-    // Get initial session
-    const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setCurrentUser(session.user);
-        console.log('📍 Existing session found for:', session.user.email);
-        // Don't auto-switch on initial load - let user trigger actions
+        setUserEmail(session.user.email);
       }
     };
 
-    checkSession();
+    initializeApp();
+  }, []);
 
-    // Listen for auth state changes
+  // Handle auth state changes
+  useEffect(() => {
+    let isProcessingAuth = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 Auth event:', event, session?.user?.email);
-      
       if (event === 'SIGNED_IN' && session?.user && !isProcessingAuth) {
         isProcessingAuth = true;
         const user = session.user;
         setCurrentUser(user);
-        console.log('✅ User signed in:', user.email);
+        setUserEmail(user.email);
         
         const loadingToast = toast.loading('Setting up your account...');
         
         try {
-          // Ensure database exists and switch to it
           const result = await switchToUserDatabase(user.email);
-          
           toast.dismiss(loadingToast);
           
           if (result.isNew) {
             toast.success('Welcome! Your account is ready.', { duration: 4000 });
-            // For new users, do a full page reload to ensure clean state
             setTimeout(() => window.location.reload(), 1500);
           } else {
             toast.success('Welcome back!');
-            // For existing users, just refresh current view
-            setTimeout(() => {
-              if (activeTab === 'mostPlayed') {
-                fetchSongs();
-              } else if (activeTab === 'playlists') {
-                fetchPlaylists();
-              } else if (activeTab === 'favorites') {
-                fetchFavorites();
-              }
-            }, 500);
+            setTimeout(() => refreshCurrentView(), 500);
           }
         } catch (error) {
           console.error('❌ Failed to switch database:', error);
@@ -192,16 +265,13 @@ const App = () => {
           isProcessingAuth = false;
         }
       } else if (event === 'SIGNED_OUT') {
-        console.log('👋 User signed out');
         setCurrentUser(null);
-        // Reset to guest mode - reload handled by AccountSettingsModal
+        setUserEmail(null);
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []); // Empty dependency - only runs once on mount
+    return () => subscription.unsubscribe();
+  }, [refreshCurrentView]);
 
   // Search handler
   const handleSearch = useCallback(async (query) => {
@@ -300,7 +370,6 @@ const App = () => {
       ? [...searchResults]
       : [...(activeTab === 'playlists' ? selectedPlaylistSongs : songs)];
 
-    // Apply local search filter
     if (localSearchQuery.trim()) {
       const query = localSearchQuery.toLowerCase();
       result = result.filter(song => 
@@ -309,7 +378,6 @@ const App = () => {
       );
     }
 
-    // Apply sorting
     switch (currentSort) {
       case 'title':
         result.sort((a, b) => {
@@ -336,43 +404,68 @@ const App = () => {
     return result;
   }, [isSearching, searchResults, activeTab, selectedPlaylistSongs, songs, localSearchQuery, currentSort, sortOrder]);
 
-  // Memoized sort options
   const sortOptions = useMemo(() => [
     { label: 'Added On', value: 'addedOn' },
     { label: 'Title', value: 'title' },
   ], []);
 
-  // Memoized active playlist name
   const activePlaylistName = useMemo(() => {
     return playlists.find((p) => p.id === activePlaylistId)?.name || 'Playlist';
   }, [playlists, activePlaylistId]);
 
   return (
     <PlayerProvider>
-    <Toaster
-      position="top-right"
-      toastOptions={{
-        duration: 3000,
-        style: {
-          background: '#1f2937',
-          color: '#fff',
-          border: '1px solid #374151',
-          marginRight: '120px',
-        },
-        success: {
-          iconTheme: {
-            primary: '#10b981',
-            secondary: '#fff',
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1f2937',
+            color: '#fff',
+            border: '1px solid #374151',
+            marginRight: '120px',
           },
-        },
-        error: {
-          iconTheme: {
-            primary: '#ef4444',
-            secondary: '#fff',
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
           },
-        },
-      }}
-    />
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+
+      {/* Playlist Modals */}
+      <CreatePlaylistModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreate={handleCreatePlaylist}
+      />
+
+      <EditPlaylistModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedPlaylist(null);
+        }}
+        playlist={selectedPlaylist}
+        onUpdate={handleEditPlaylist}
+      />
+
+      <DeletePlaylistModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setSelectedPlaylist(null);
+        }}
+        playlist={selectedPlaylist}
+        onConfirm={handleDeletePlaylist}
+      />
       
       <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
         <Header
@@ -394,8 +487,8 @@ const App = () => {
           <main className="flex-1 overflow-y-auto pb-32">
             <div className="px-4 md:px-6 py-4">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-                <div>
-                  <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent pb-1">
                     {isSearching
                       ? 'Search Results'
                       : activeTab === 'mostPlayed'
@@ -404,6 +497,17 @@ const App = () => {
                       ? `${activePlaylistName} Songs`
                       : 'Your Favorites'}
                   </h2>
+                  
+                  {/* Circular Plus Button - Only visible in playlist tab on desktop */}
+                  {activeTab === 'playlists' && (
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      className="hidden md:flex items-center justify-center w-10 h-10 bg-green-600 hover:bg-green-700 rounded-full transition-all duration-200 shadow-lg hover:scale-110 hover:shadow-green-500/30"
+                      title="Create new playlist"
+                    >
+                      <Plus size={18} className="text-white" />
+                    </button>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-3 w-full md:w-auto flex-1 md:flex-initial">
@@ -457,6 +561,8 @@ const App = () => {
                             playlist={playlist}
                             onClick={() => handlePlaylistClick(playlist.id)}
                             isActive={playlist.id === activePlaylistId}
+                            onEdit={openEditModal}
+                            onDelete={openDeleteModal}
                           />
                         ))}
                       </div>

@@ -1,6 +1,8 @@
 import { supabase } from "../supabase";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:5000/api" : "/api");
 const STORAGE_BUCKET = "databases";
 
 // Helper function to extract username from email
@@ -20,6 +22,7 @@ export const switchToUserDatabase = async (userEmail) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-User-Email": userEmail, // Include user email in header
       },
     });
 
@@ -85,6 +88,7 @@ export const handleDatabaseImport = async (userEmail, file) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-User-Email": userEmail, // Include user email in header
       },
     });
 
@@ -109,11 +113,31 @@ export const handleDatabaseImport = async (userEmail, file) => {
 /**
  * Get download URL for export (from Supabase)
  * Export always happens from Supabase, not local file
+ * Note: This first syncs the current database to cloud to ensure latest version
  */
 export const getDatabaseDownloadUrl = async (userEmail) => {
   try {
     const username = getUsername(userEmail);
     const remotePath = `${username}.db`;
+
+    console.log(`☁️ Syncing database before export...`);
+
+    // First, sync current database to cloud to ensure we're exporting the latest
+    const syncResponse = await fetch(`${API_BASE}/sync-database/${userEmail}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Email": userEmail,
+      },
+    });
+
+    if (!syncResponse.ok) {
+      console.warn(
+        "⚠️ Sync before export failed, proceeding with cloud version"
+      );
+    } else {
+      console.log("✅ Database synced to cloud");
+    }
 
     console.log(`🔗 Getting download URL for ${username}...`);
 
@@ -123,7 +147,7 @@ export const getDatabaseDownloadUrl = async (userEmail) => {
       .createSignedUrl(remotePath, 3600);
 
     if (error) {
-      if (error.statusCode === 404) {
+      if (error.statusCode === 404 || error.message?.includes("not found")) {
         throw new Error(
           "Database not found in cloud storage. Please try logging out and back in."
         );
@@ -154,6 +178,7 @@ export const syncDatabaseToCloud = async (userEmail) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-User-Email": userEmail, // Include user email in header
       },
     });
 

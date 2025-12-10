@@ -54,67 +54,139 @@ if (!fs.existsSync(EMPTY_TEMPLATE)) {
   console.warn("⚠️ empty.db template is missing! Will create from schema.");
 }
 
-// === DATABASE MANAGEMENT ===
-let currentDbPath = GUEST_DB;
-let db = null;
-
-const initializeGuestDb = () => {
-  try {
-    db = new Database(currentDbPath, { readonly: false });
-    console.log("✅ Guest database connected");
-  } catch (error) {
-    console.error("❌ Failed to connect to guest database:", error.message);
+// === DATABASE FUNCTIONS ===
+// Helper function to get database path for a user
+const getDatabasePath = (username) => {
+  if (
+    !username ||
+    username === "guest" ||
+    username === "null" ||
+    username === "undefined"
+  ) {
+    console.log(`📂 Using GUEST database: ${GUEST_DB}`);
+    return GUEST_DB;
   }
+  const userPath = path.join(DB_DIR, `${username}.db`);
+  console.log(`📂 Using USER database: ${userPath}`);
+  return userPath;
 };
 
-initializeGuestDb();
+// Helper function to open database - creates NEW connection each time
+const openDatabaseForRequest = (username) => {
+  const dbPath = getDatabasePath(username);
+  const key = username || "guest";
 
-const switchToDatabase = (usernameOrEmail = null) => {
-  // Extract username if email is passed
-  const username =
-    usernameOrEmail && usernameOrEmail.includes("@")
-      ? usernameOrEmail.split("@")[0]
-      : usernameOrEmail;
+  console.log(`🔓 Opening NEW database connection for: ${key}`);
 
-  const newPath = username ? path.join(DB_DIR, `${username}.db`) : GUEST_DB;
-
-  if (currentDbPath === newPath && db) {
-    console.log(
-      `✓ Already connected to ${username ? username : "guest"} database`
-    );
-    return true;
-  }
-
-  if (db) {
-    try {
-      db.close();
-      console.log(`✓ Closed previous database`);
-    } catch (error) {
-      console.error("⚠️ Error closing database:", error.message);
+  // Check if database file exists
+  if (!fs.existsSync(dbPath)) {
+    console.error(`❌ Database file not found: ${dbPath}`);
+    if (key !== "guest") {
+      console.log(`⚠️ Falling back to GUEST database`);
+      return openDatabaseForRequest(null);
     }
+    throw new Error(`Guest database not found at ${dbPath}`);
   }
 
   try {
-    db = new Database(newPath, { readonly: false });
-    currentDbPath = newPath;
-    console.log(`🔄 Switched to → ${username ? `User: ${username}` : "Guest"}`);
-    return true;
+    // Create a NEW database connection for this specific request
+    const db = new Database(dbPath, { readonly: false, fileMustExist: true });
+    console.log(`✅ Database opened successfully: ${path.basename(dbPath)}`);
+    return db;
   } catch (error) {
-    console.error("❌ Failed to switch database:", error.message);
-    try {
-      db = new Database(GUEST_DB, { readonly: false });
-      currentDbPath = GUEST_DB;
-      console.log("↩️ Fallen back to guest database");
-      return false;
-    } catch (fallbackError) {
-      console.error(
-        "❌ Critical: Cannot open any database:",
-        fallbackError.message
-      );
-      return false;
+    console.error(`❌ Failed to open database ${dbPath}:`, error.message);
+    if (key !== "guest") {
+      console.log(`⚠️ Falling back to GUEST database`);
+      return openDatabaseForRequest(null);
     }
+    throw error;
   }
 };
+
+// === MIDDLEWARE: Extract user and attach database ===
+const attachDatabase = (req, res, next) => {
+  // Extract user email from header (only from header, not query/body for security)
+  const userEmail = req.headers["x-user-email"] || null;
+
+  // Extract username from email
+  const username = userEmail ? userEmail.split("@")[0] : null;
+
+  // Log the request
+  const userIdentifier = username || "GUEST";
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`👤 REQUEST: ${req.method} ${req.path}`);
+  console.log(`📧 User Email Header: ${userEmail || "NOT PROVIDED"}`);
+  console.log(`👤 Identified User: ${userIdentifier}`);
+  console.log(`${"=".repeat(60)}`);
+
+  // Store user info on request object
+  req.username = username;
+  req.userEmail = userEmail;
+  req.userIdentifier = userIdentifier;
+
+  // Open database for THIS specific request
+  try {
+    console.log(`🔄 Attaching database for user: ${userIdentifier}`);
+    req.userDb = openDatabaseForRequest(username);
+    console.log(`✅ Database successfully attached to request`);
+  } catch (error) {
+    console.error(`❌ CRITICAL: Failed to attach database:`, error);
+    return res.status(500).json({
+      error: "Database connection failed",
+      details: error.message,
+    });
+  }
+
+  // CRITICAL: Ensure database is closed when response finishes
+  res.on("finish", () => {
+    if (req.userDb) {
+      try {
+        req.userDb.close();
+        console.log(`🔒 Database closed for: ${userIdentifier}`);
+      } catch (error) {
+        console.error(
+          `⚠️ Error closing database for ${userIdentifier}:`,
+          error.message
+        );
+      }
+    }
+  });
+
+  // Handle errors during request processing
+  res.on("error", () => {
+    if (req.userDb) {
+      try {
+        req.userDb.close();
+        console.log(
+          `🔒 Database closed (error handler) for: ${userIdentifier}`
+        );
+      } catch (error) {
+        console.error(
+          `⚠️ Error in error handler closing database:`,
+          error.message
+        );
+      }
+    }
+  });
+
+  next();
+};
+
+// Apply middleware to all API routes except login/logout/health
+app.use((req, res, next) => {
+  // Skip middleware for these endpoints
+  if (
+    req.path.startsWith("/api/login") ||
+    req.path.startsWith("/api/logout") ||
+    req.path.startsWith("/api/sync-database") ||
+    req.path === "/api/health"
+  ) {
+    return next();
+  }
+
+  // Apply database attachment middleware
+  attachDatabase(req, res, next);
+});
 
 // === ENSURE USER DATABASE ===
 const ensureUserDatabase = async (userEmail) => {
@@ -122,22 +194,23 @@ const ensureUserDatabase = async (userEmail) => {
   const localPath = path.join(DB_DIR, `${username}.db`);
   const remotePath = `${username}.db`;
 
-  console.log(`🔍 Processing login for: ${userEmail} (using ${username}.db)`);
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`🔍 PROCESSING LOGIN FOR: ${userEmail}`);
+  console.log(`📁 Local path: ${localPath}`);
+  console.log(`☁️ Remote path: ${remotePath}`);
+  console.log(`${"=".repeat(60)}\n`);
 
   if (fs.existsSync(localPath)) {
-    console.log(`📂 Local database found for ${username}`);
-    switchToDatabase(username);
+    console.log(`✅ Local database found for ${username}`);
     return { success: true, isNew: false };
   }
 
-  console.log(`🔍 Checking if ${username}.db exists in Supabase...`);
+  console.log(`🔍 Checking Supabase for ${remotePath}...`);
 
   try {
     const { data: files, error: listError } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .list("", {
-        search: remotePath,
-      });
+      .list("", { search: remotePath });
 
     if (listError) {
       console.error("❌ Error listing bucket:", listError);
@@ -160,49 +233,36 @@ const ensureUserDatabase = async (userEmail) => {
       fs.writeFileSync(localPath, buffer);
 
       console.log(`✅ Downloaded existing database for ${username}`);
-      switchToDatabase(username);
       return { success: true, isNew: false };
     } else {
-      console.log(`🆕 NEW USER: ${username} - Creating database...`);
+      console.log(`🆕 NEW USER: Creating database for ${username}...`);
 
       if (!fs.existsSync(EMPTY_TEMPLATE)) {
-        console.error("❌ empty.db template not found at:", EMPTY_TEMPLATE);
         throw new Error(
           "Server configuration error: empty.db template missing"
         );
       }
 
-      console.log(`📋 Copying empty.db → ${username}.db`);
       fs.copyFileSync(EMPTY_TEMPLATE, localPath);
-      console.log(`✅ Created local database`);
+      console.log(`✅ Created local database from template`);
 
-      try {
-        console.log(`☁️ Uploading ${remotePath} to Supabase...`);
-        const fileBuffer = fs.readFileSync(localPath);
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(remotePath, fileBuffer, {
-            contentType: "application/x-sqlite3",
-            upsert: false,
-          });
+      const fileBuffer = fs.readFileSync(localPath);
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(remotePath, fileBuffer, {
+          contentType: "application/x-sqlite3",
+          upsert: false,
+        });
 
-        if (uploadError) {
-          console.error("❌ Upload error:", uploadError);
-          throw uploadError;
-        }
-        console.log(`✅ Successfully uploaded to Supabase`);
-      } catch (uploadErr) {
-        console.error("❌ Failed to upload to Supabase:", uploadErr);
+      if (uploadError) {
+        console.error("❌ Upload error:", uploadError);
         if (fs.existsSync(localPath)) {
           fs.unlinkSync(localPath);
         }
-        throw new Error(
-          `Failed to upload database to cloud: ${uploadErr.message}`
-        );
+        throw uploadError;
       }
 
-      switchToDatabase(username);
-      console.log(`✅ New user setup complete for ${username}`);
+      console.log(`✅ Uploaded new database to Supabase`);
       return { success: true, isNew: true };
     }
   } catch (err) {
@@ -214,12 +274,11 @@ const ensureUserDatabase = async (userEmail) => {
 };
 
 // === ROUTES ===
-
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    database: currentDbPath.replace(DB_DIR, ""),
     supabase: supabaseUrl ? "connected" : "not initialized",
+    guestDbExists: fs.existsSync(GUEST_DB),
     timestamp: new Date().toISOString(),
   });
 });
@@ -240,83 +299,46 @@ app.post("/api/login/:email", async (req, res) => {
       requiresRefresh: true,
     });
   } catch (error) {
-    console.error("Error ensuring database:", error);
+    console.error("❌ Login error:", error);
     res
       .status(500)
       .json({ error: error.message || "Failed to load user database" });
   }
 });
 
-app.get("/api/download-database/:email", async (req, res) => {
-  const email = req.params.email;
-
-  if (!email || !email.includes("@")) {
-    return res.status(400).json({ error: "Invalid email format" });
-  }
-
-  try {
-    const result = await ensureUserDatabase(email);
-    res.json({
-      message: result.isNew ? "New database created" : "Database loaded",
-      user: email,
-      isNew: result.isNew,
-      requiresRefresh: true,
-    });
-  } catch (error) {
-    console.error("Error ensuring database:", error);
-    res
-      .status(500)
-      .json({ error: error.message || "Failed to load user database" });
-  }
-});
-
-app.post("/api/import-database/:email", async (req, res) => {
+// Sync database to cloud (without logging out)
+app.post("/api/sync-database/:email", async (req, res) => {
   const email = req.params.email;
   const username = email.split("@")[0];
   const localPath = path.join(DB_DIR, `${username}.db`);
-  const remotePath = `${username}.db`;
 
-  console.log(`📥 Import initiated for ${email} (using ${username}.db)`);
+  console.log(`🔄 Sync initiated for ${email}`);
+
+  if (!fs.existsSync(localPath)) {
+    return res.status(404).json({ error: "Local database not found" });
+  }
 
   try {
-    const { data, error } = await supabase.storage
+    const fileBuffer = fs.readFileSync(localPath);
+    const remotePath = `${username}.db`;
+
+    const { error } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .download(remotePath);
+      .update(remotePath, fileBuffer, {
+        contentType: "application/x-sqlite3",
+        upsert: true,
+      });
 
     if (error) throw error;
 
-    if (currentDbPath === localPath && db) {
-      try {
-        db.close();
-        db = null;
-        console.log("✅ Closed current database");
-      } catch (error) {
-        console.error("⚠️ Error closing database:", error.message);
-      }
-    }
-
-    if (fs.existsSync(localPath)) {
-      fs.unlinkSync(localPath);
-      console.log("🗑️ Deleted old local database");
-    }
-
-    const arrayBuffer = await data.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    fs.writeFileSync(localPath, buffer);
-    console.log("💾 Saved new database locally");
-
-    switchToDatabase(username);
-
+    console.log(`☁️ Synced database for ${username}`);
     res.json({
-      message: "Database imported successfully",
-      user: email,
-      requiresRefresh: true,
+      message: "Database synced successfully",
+      success: true,
     });
-  } catch (error) {
-    console.error("❌ Import failed:", error);
-    res
-      .status(500)
-      .json({ error: error.message || "Failed to import database" });
+  } catch (err) {
+    console.error("❌ Sync failed:", err.message);
+    res.status(500).json({ error: "Failed to sync database" });
   }
 });
 
@@ -325,18 +347,11 @@ app.post("/api/logout/:email", async (req, res) => {
   const username = email.split("@")[0];
   const localPath = path.join(DB_DIR, `${username}.db`);
 
-  console.log(`👋 Logout initiated for ${email} (using ${username}.db)`);
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`👋 LOGOUT: ${email}`);
+  console.log(`${"=".repeat(60)}\n`);
 
-  if (currentDbPath === localPath && db) {
-    try {
-      db.close();
-      db = null;
-      console.log("✅ Closed user database");
-    } catch (error) {
-      console.error("⚠️ Error closing database:", error.message);
-    }
-  }
-
+  // Upload to Supabase and delete local file
   if (fs.existsSync(localPath)) {
     try {
       const fileBuffer = fs.readFileSync(localPath);
@@ -350,17 +365,16 @@ app.post("/api/logout/:email", async (req, res) => {
         });
 
       if (error) throw error;
-      console.log(`☁️ Uploaded database for ${username}`);
 
+      console.log(`☁️ Uploaded database for ${username}`);
       fs.unlinkSync(localPath);
-      console.log(`🗑️ Deleted local database`);
+      console.log(`🗑️ Deleted local database for ${username}`);
     } catch (err) {
-      console.error("❌ Logout upload failed:", err.message);
+      console.error("❌ Logout sync failed:", err.message);
       return res.status(500).json({ error: "Failed to sync database" });
     }
   }
 
-  switchToDatabase();
   res.json({
     message: "Logged out successfully",
     requiresRefresh: true,
@@ -368,71 +382,86 @@ app.post("/api/logout/:email", async (req, res) => {
 });
 
 // === API ENDPOINTS ===
-
 app.get("/api/songs", (req, res) => {
   try {
-    if (!db) throw new Error("Database not initialized");
+    console.log(`📊 Fetching songs for: ${req.userIdentifier}`);
+    const db = req.userDb;
     const stmt = db.prepare(
       "SELECT * FROM Song ORDER BY totalPlayTimeMs DESC LIMIT 100"
     );
-    res.json({ songs: stmt.all() });
+    const songs = stmt.all();
+    console.log(`✅ Returning ${songs.length} songs`);
+    res.json({ songs });
   } catch (error) {
-    console.error("Error fetching songs:", error);
+    console.error("❌ Error fetching songs:", error);
     res.status(500).json({ error: "Failed to fetch songs" });
   }
 });
 
 app.get("/api/favorites", (req, res) => {
   try {
-    if (!db) throw new Error("Database not initialized");
+    console.log(`❤️ Fetching favorites for: ${req.userIdentifier}`);
+    const db = req.userDb;
     const stmt = db.prepare(
       "SELECT * FROM Song WHERE likedAt IS NOT NULL ORDER BY likedAt DESC"
     );
-    res.json({ songs: stmt.all() });
+    const songs = stmt.all();
+    console.log(`✅ Returning ${songs.length} favorites`);
+    res.json({ songs });
   } catch (error) {
-    console.error("Error fetching favorites:", error);
+    console.error("❌ Error fetching favorites:", error);
     res.status(500).json({ error: "Failed to fetch favorites" });
   }
 });
 
 app.get("/api/playlists", (req, res) => {
   try {
-    if (!db) throw new Error("Database not initialized");
+    console.log(`📋 Fetching playlists for: ${req.userIdentifier}`);
+    const db = req.userDb;
     const stmt = db.prepare("SELECT * FROM Playlist");
-    res.json({ playlists: stmt.all() });
+    const playlists = stmt.all();
+    console.log(`✅ Returning ${playlists.length} playlists`);
+    res.json({ playlists });
   } catch (error) {
-    console.error("Error fetching playlists:", error);
+    console.error("❌ Error fetching playlists:", error);
     res.status(500).json({ error: "Failed to fetch playlists" });
   }
 });
 
 app.get("/api/playlists/:id/songs", (req, res) => {
   try {
-    if (!db) throw new Error("Database not initialized");
+    console.log(
+      `📋 Fetching playlist ${req.params.id} songs for: ${req.userIdentifier}`
+    );
+    const db = req.userDb;
     const stmt = db.prepare(`
-      SELECT s.* FROM Song s
+      SELECT s.*
+      FROM Song s
       JOIN SongPlaylistMap spm ON s.id = spm.songId
       WHERE spm.playlistId = ?
       ORDER BY spm.position ASC
     `);
-    res.json({ songs: stmt.all(req.params.id) });
+    const songs = stmt.all(req.params.id);
+    console.log(`✅ Returning ${songs.length} playlist songs`);
+    res.json({ songs });
   } catch (error) {
-    console.error("Error fetching playlist songs:", error);
+    console.error("❌ Error fetching playlist songs:", error);
     res.status(500).json({ error: "Failed to fetch playlist songs" });
   }
 });
 
 app.get("/api/songs/:songId/playlists", (req, res) => {
   try {
-    if (!db) throw new Error("Database not initialized");
+    const db = req.userDb;
     const stmt = db.prepare(`
-      SELECT p.* FROM Playlist p
+      SELECT p.*
+      FROM Playlist p
       JOIN SongPlaylistMap spm ON p.id = spm.playlistId
       WHERE spm.songId = ?
     `);
     res.json({ playlists: stmt.all(req.params.songId) });
   } catch (error) {
-    console.error("Error fetching song playlists:", error);
+    console.error("❌ Error fetching song playlists:", error);
     res.status(500).json({ error: "Failed to fetch playlists" });
   }
 });
@@ -448,14 +477,17 @@ app.put("/api/songs/:songId/favorite", (req, res) => {
   } = req.body;
 
   try {
-    if (!db) throw new Error("Database not initialized");
-
+    console.log(
+      `❤️ Toggling favorite for: ${req.userIdentifier} - Song: ${songId}`
+    );
+    const db = req.userDb;
     const song = db
       .prepare("SELECT likedAt FROM Song WHERE id = ?")
       .get(songId);
 
     if (song?.likedAt) {
       db.prepare("UPDATE Song SET likedAt = NULL WHERE id = ?").run(songId);
+      console.log(`✅ Removed from favorites`);
       res.json({ favorite: false });
     } else {
       if (song) {
@@ -477,10 +509,11 @@ app.put("/api/songs/:songId/favorite", (req, res) => {
           totalPlayTimeMs
         );
       }
+      console.log(`✅ Added to favorites`);
       res.json({ favorite: true });
     }
   } catch (error) {
-    console.error("Error toggling favorite:", error);
+    console.error("❌ Error toggling favorite:", error);
     res.status(500).json({ error: "Failed to toggle favorite" });
   }
 });
@@ -496,8 +529,7 @@ app.post("/api/playlists/:playlistId/songs/:songId", (req, res) => {
   } = req.body;
 
   try {
-    if (!db) throw new Error("Database not initialized");
-
+    const db = req.userDb;
     const existingMapping = db
       .prepare(
         "SELECT 1 FROM SongPlaylistMap WHERE songId = ? AND playlistId = ?"
@@ -537,7 +569,7 @@ app.post("/api/playlists/:playlistId/songs/:songId", (req, res) => {
 
     res.status(201).json({ success: true, position });
   } catch (error) {
-    console.error("Error adding to playlist:", error);
+    console.error("❌ Error adding to playlist:", error);
     res.status(500).json({ error: "Failed to add song to playlist" });
   }
 });
@@ -546,8 +578,7 @@ app.delete("/api/playlists/:playlistId/songs/:songId", (req, res) => {
   const { playlistId, songId } = req.params;
 
   try {
-    if (!db) throw new Error("Database not initialized");
-
+    const db = req.userDb;
     const result = db
       .prepare(
         "DELETE FROM SongPlaylistMap WHERE playlistId = ? AND songId = ?"
@@ -560,22 +591,104 @@ app.delete("/api/playlists/:playlistId/songs/:songId", (req, res) => {
       res.status(404).json({ error: "Song not found in playlist" });
     }
   } catch (error) {
-    console.error("Error removing from playlist:", error);
+    console.error("❌ Error removing from playlist:", error);
     res.status(500).json({ error: "Failed to remove song" });
+  }
+});
+
+// Create new playlist - UPDATED TO USE AUTO-INCREMENT ID
+app.post("/api/playlists", (req, res) => {
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Playlist name is required" });
+  }
+
+  try {
+    console.log(`📋 Creating playlist for: ${req.userIdentifier}`);
+    const db = req.userDb;
+
+    // Let SQLite auto-increment the ID
+    const stmt = db.prepare("INSERT INTO Playlist (name) VALUES (?)");
+    const result = stmt.run(name.trim());
+
+    const playlistId = result.lastInsertRowid; // Get the auto-generated ID
+
+    console.log(`✅ Playlist created: ${name} (ID: ${playlistId})`);
+    res.status(201).json({
+      success: true,
+      playlist: {
+        id: playlistId,
+        name: name.trim(),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error creating playlist:", error);
+    res.status(500).json({
+      error: "Failed to create playlist",
+      details: error.message,
+    });
+  }
+});
+
+// Update playlist name
+app.put("/api/playlists/:id", (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Playlist name is required" });
+  }
+
+  try {
+    console.log(`📋 Updating playlist ${id} for: ${req.userIdentifier}`);
+    const db = req.userDb;
+
+    const result = db
+      .prepare("UPDATE Playlist SET name = ? WHERE id = ?")
+      .run(name.trim(), id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    console.log(`✅ Playlist updated: ${name}`);
+    res.json({ success: true, playlist: { id, name: name.trim() } });
+  } catch (error) {
+    console.error("❌ Error updating playlist:", error);
+    res.status(500).json({ error: "Failed to update playlist" });
+  }
+});
+
+// Delete playlist
+app.delete("/api/playlists/:id", (req, res) => {
+  const { id } = req.params;
+
+  try {
+    console.log(`📋 Deleting playlist ${id} for: ${req.userIdentifier}`);
+    const db = req.userDb;
+
+    // Delete playlist songs mapping first
+    db.prepare("DELETE FROM SongPlaylistMap WHERE playlistId = ?").run(id);
+
+    // Delete playlist
+    const result = db.prepare("DELETE FROM Playlist WHERE id = ?").run(id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    console.log(`✅ Playlist deleted`);
+    res.json({ success: true, message: "Playlist deleted" });
+  } catch (error) {
+    console.error("❌ Error deleting playlist:", error);
+    res.status(500).json({ error: "Failed to delete playlist" });
   }
 });
 
 // Graceful shutdown
 const gracefulShutdown = () => {
   console.log("\n🛑 Shutting down gracefully...");
-  if (db) {
-    try {
-      db.close();
-      console.log("✅ Database closed");
-    } catch (error) {
-      console.error("❌ Error closing database:", error.message);
-    }
-  }
   process.exit(0);
 };
 
@@ -584,10 +697,20 @@ process.on("SIGINT", gracefulShutdown);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`\n🎵 ViMusic Backend Running → http://localhost:${PORT}`);
-  console.log(`📊 Database: ${currentDbPath.replace(DB_DIR, "")}`);
-  console.log(`☁️ Supabase: Connected\n`);
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`🎵 ViMusic Backend Server Started`);
+  console.log(`📡 Listening on: http://localhost:${PORT}`);
+  console.log(`☁️ Supabase: Connected`);
+  console.log(`📁 Database Directory: ${DB_DIR}`);
+  console.log(`📂 Guest Database: ${GUEST_DB}`);
+  console.log(`${"=".repeat(60)}\n`);
 
-  // Start automatic guest database sync
+  // Verify guest database exists
+  if (fs.existsSync(GUEST_DB)) {
+    console.log(`✅ Guest database found: ${GUEST_DB}\n`);
+  } else {
+    console.error(`❌ WARNING: Guest database NOT found: ${GUEST_DB}\n`);
+  }
+
   startAutomaticSync();
 });
