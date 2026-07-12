@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Vercel
+.vercel
+
+# environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# misc
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SQLite files (keep empty.db as reference only, not needed at runtime)
+public/database/*.db-shm
+public/database/*.db-wal
+# vimusic.db and empty.db are no longer needed for deployment
+# Keep locally only for seeding. Uncomment the next line after seeding:
+# public/database/vimusic.db
+# public/database/empty.db

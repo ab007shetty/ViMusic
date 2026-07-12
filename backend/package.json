@@ -1,23 +1,20 @@
 {
   "name": "vimusic-backend",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "sync:test": "node scripts/testSync.js",
-    "sync:manual": "node scripts/syncGuestDatabase.js"
+    "dev": "node dev-server.js",
+    "deploy": "vercel --prod",
+    "seed:guest": "node scripts/seed-guest-db.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
-    "better-sqlite3": "^11.2.1",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "dotenv": "^16.3.1",
-    "express": "^4.21.0",
-    "node-cron": "^4.2.1"
+    "express": "^5.2.1",
+    "sql.js": "^1.12.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "vercel": "^55.0.0"
   }
 }
