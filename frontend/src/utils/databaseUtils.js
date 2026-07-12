@@ -2,8 +2,7 @@ import { supabase } from "../supabase";
 
 const API_BASE =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? "http://localhost:5000/api" : "/api");
-const STORAGE_BUCKET = "databases";
+  (import.meta.env.DEV ? "http://localhost:8080/api" : "/api");
 
 // Helper function to extract username from email
 const getUsername = (email) => {
@@ -12,7 +11,6 @@ const getUsername = (email) => {
 
 /**
  * Call backend to switch to user database (LOGIN)
- * Backend will download from Supabase or create new if doesn't exist
  */
 export const switchToUserDatabase = async (userEmail) => {
   try {
@@ -22,7 +20,7 @@ export const switchToUserDatabase = async (userEmail) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User-Email": userEmail, // Include user email in header
+        "X-User-Email": userEmail,
       },
     });
 
@@ -48,7 +46,7 @@ export const switchToUserDatabase = async (userEmail) => {
 };
 
 /**
- * Upload empty database if doesn't exist, then switch (LEGACY - for backwards compatibility)
+ * Upload empty database if doesn't exist, then switch (LEGACY)
  */
 export const uploadEmptyDatabase = async (userEmail) => {
   return await switchToUserDatabase(userEmail);
@@ -56,8 +54,7 @@ export const uploadEmptyDatabase = async (userEmail) => {
 
 /**
  * Handle database import
- * 1. Upload new database to Supabase
- * 2. Call backend to download and switch to it
+ * Sends the selected .db file directly to the backend.
  */
 export const handleDatabaseImport = async (userEmail, file) => {
   if (!file) {
@@ -65,35 +62,19 @@ export const handleDatabaseImport = async (userEmail, file) => {
   }
 
   try {
-    const username = getUsername(userEmail);
-    const remotePath = `${username}.db`;
-
-    console.log(`📤 Uploading database to Supabase as ${remotePath}...`);
-
-    // Upload to Supabase Storage (overwrite existing)
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(remotePath, file, {
-        contentType: "application/x-sqlite3",
-        upsert: true, // Overwrite if exists
-      });
-
-    if (uploadError) throw uploadError;
-    console.log("☁️ Database uploaded to Supabase Storage");
-
-    // Call backend to download and switch
-    console.log(`📥 Importing database on server...`);
+    console.log(`📥 Sending database file to backend...`);
 
     const response = await fetch(`${API_BASE}/import-database/${userEmail}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-User-Email": userEmail, // Include user email in header
+        "X-User-Email": userEmail,
+        "Content-Type": "application/octet-stream"
       },
+      body: file // Send binary file directly!
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || "Failed to import on server");
     }
 
@@ -111,19 +92,24 @@ export const handleDatabaseImport = async (userEmail, file) => {
 };
 
 /**
- * Get download URL for export (from Supabase)
- * Export always happens from Supabase, not local file
- * Note: This first syncs the current database to cloud to ensure latest version
+ * Get download URL for export
+ * Returns the direct URL to the backend's export endpoint.
  */
 export const getDatabaseDownloadUrl = async (userEmail) => {
+  console.log(`🔗 Getting download URL for ${userEmail}...`);
+  // The backend's GET endpoint returns the .db binary directly.
+  return `${API_BASE}/export-database/${userEmail}`;
+};
+
+/**
+ * Sync current database to Supabase (called during logout)
+ * Our Postgres backend is always in sync, so this just cleans up the session.
+ */
+export const syncDatabaseToCloud = async (userEmail) => {
   try {
-    const username = getUsername(userEmail);
-    const remotePath = `${username}.db`;
+    console.log(`☁️ Logging out ${userEmail}...`);
 
-    console.log(`☁️ Syncing database before export...`);
-
-    // First, sync current database to cloud to ensure we're exporting the latest
-    const syncResponse = await fetch(`${API_BASE}/sync-database/${userEmail}`, {
+    const response = await fetch(`${API_BASE}/logout/${userEmail}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -131,71 +117,17 @@ export const getDatabaseDownloadUrl = async (userEmail) => {
       },
     });
 
-    if (!syncResponse.ok) {
-      console.warn(
-        "⚠️ Sync before export failed, proceeding with cloud version"
-      );
-    } else {
-      console.log("✅ Database synced to cloud");
-    }
-
-    console.log(`🔗 Getting download URL for ${username}...`);
-
-    // Get signed URL (valid for 1 hour)
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUrl(remotePath, 3600);
-
-    if (error) {
-      if (error.statusCode === 404 || error.message?.includes("not found")) {
-        throw new Error(
-          "Database not found in cloud storage. Please try logging out and back in."
-        );
-      }
-      throw error;
-    }
-
-    if (!data?.signedUrl) {
-      throw new Error("Failed to generate download URL");
-    }
-
-    console.log("✅ Download URL generated");
-    return data.signedUrl;
-  } catch (error) {
-    console.error("❌ Error getting download URL:", error);
-    throw error;
-  }
-};
-
-/**
- * Sync current database to Supabase (called during logout)
- */
-export const syncDatabaseToCloud = async (userEmail) => {
-  try {
-    console.log(`☁️ Syncing database for ${userEmail}...`);
-
-    const response = await fetch(`${API_BASE}/logout/${userEmail}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Email": userEmail, // Include user email in header
-      },
-    });
-
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to sync database");
+      console.warn("⚠️ Logout warning from server");
     }
-
-    const data = await response.json();
-    console.log("✅ Database synced:", data.message);
 
     return {
       success: true,
-      requiresRefresh: data.requiresRefresh,
+      requiresRefresh: true,
     };
   } catch (error) {
-    console.error("❌ Error syncing database:", error);
+    console.error("❌ Error during logout:", error);
     throw error;
   }
 };
+

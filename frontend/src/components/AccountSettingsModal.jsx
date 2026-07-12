@@ -91,7 +91,7 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
 
     setIsExporting(true);
     try {
-      // Get signed download URL from Supabase
+      // Get export URL from backend
       const url = await getDatabaseDownloadUrl(user.email);
       
       // Download the file
@@ -124,7 +124,7 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
     try {
       // Sync database to cloud before signing out
       await syncDatabaseToCloud(user.email);
-      console.log('✅ Database synced to cloud');
+      console.log('✅ Session cleaned up');
       
       // CRITICAL: Clear user email from API service
       setUserEmail(null);
@@ -283,7 +283,7 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
       {/* Info Footer */}
       <div className="px-4 py-3 bg-gray-900/30 border-t border-gray-700">
         <p className="text-xs text-gray-500 text-center">
-          💡 Your data is securely synced to the cloud
+          💡 Your data is securely backed up in the cloud database
         </p>
       </div>
     </div>
