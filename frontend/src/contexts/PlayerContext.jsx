@@ -78,6 +78,34 @@ export const PlayerProvider = ({ children }) => {
     };
   }, [isPlaying, playerRef.current]);
 
+  // Handle MediaSession API for mobile lock screen & background play
+  const handlersRef = useRef({ togglePlay: null, playNext: null, playPrevious: null });
+
+  // Keep handlers up to date without triggering effects
+  useEffect(() => {
+    handlersRef.current = { togglePlay, playNext, playPrevious };
+  });
+
+  useEffect(() => {
+    if ('mediaSession' in navigator && currentSong) {
+      // Set lock screen metadata
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title: currentSong.title,
+        artist: currentSong.artistsText || 'Unknown Artist',
+        album: 'ViMusic',
+        artwork: [
+          { src: currentSong.thumbnailUrl, sizes: '512x512', type: 'image/jpeg' }
+        ]
+      });
+
+      // Bind hardware buttons (volume hold, headphone buttons, lock screen)
+      navigator.mediaSession.setActionHandler('play', () => handlersRef.current.togglePlay?.());
+      navigator.mediaSession.setActionHandler('pause', () => handlersRef.current.togglePlay?.());
+      navigator.mediaSession.setActionHandler('previoustrack', () => handlersRef.current.playPrevious?.());
+      navigator.mediaSession.setActionHandler('nexttrack', () => handlersRef.current.playNext?.());
+    }
+  }, [currentSong]);
+
   const playSong = (song) => {
     setCurrentSong(song);
     setIsPlaying(true);

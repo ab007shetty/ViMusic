@@ -56,11 +56,14 @@ const App = () => {
   const fetchSongs = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchFromServer('songs');
+      // Instead of global most played, fetch Master's Mix (Anirudha's favorites)
+      const data = await fetchFromServer('favorites', {
+        headers: { 'X-User-Email': 'ab007shetty@gmail.com' }
+      });
       setSongs(data.songs || []);
     } catch (error) {
-      console.error('Error fetching songs:', error);
-      toast.error('Failed to load songs');
+      console.error("Error fetching Master's Mix:", error);
+      toast.error("Failed to load Master's Mix");
     } finally {
       setLoading(false);
     }
@@ -239,6 +242,11 @@ const App = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user && !isProcessingAuth) {
+        // Fix: If user is already signed in (e.g., from another tab or refresh), skip the reload process
+        if (getUserEmail() === session.user.email) {
+          return;
+        }
+
         isProcessingAuth = true;
         const user = session.user;
         setCurrentUser(user);
@@ -492,7 +500,7 @@ const App = () => {
                     {isSearching
                       ? 'Search Results'
                       : activeTab === 'mostPlayed'
-                      ? 'Top 100 Most Played'
+                      ? "Master's Mix"
                       : activeTab === 'playlists'
                       ? `${activePlaylistName} Songs`
                       : 'Your Favorites'}
