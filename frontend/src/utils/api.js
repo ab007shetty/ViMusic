@@ -2,7 +2,7 @@
 
 const API_BASE =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? "http://localhost:5000/api" : "/api");
+  (import.meta.env.DEV ? "http://localhost:8080/api" : "/api");
 
 // Store current user email (set after login)
 let currentUserEmail = null;

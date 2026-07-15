@@ -11,7 +11,7 @@ const Sidebar = ({
   activeTab 
 }) => {
   const menuItems = [
-    { id: 'mostPlayed', label: 'Most Played', icon: Home, action: onViewMostPlayed },
+    { id: 'mostPlayed', label: "Master's Mix", icon: Home, action: onViewMostPlayed },
     { id: 'playlists', label: 'Playlists', icon: ListMusic, action: onViewPlaylists },
     { id: 'favorites', label: 'Favorites', icon: Heart, action: onViewFavorites },
   ];
