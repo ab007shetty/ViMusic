@@ -33,17 +33,12 @@ export const isLoggedIn = () => {
 
 // ====== HEADERS WITH USER AUTH ======
 const getHeaders = (additionalHeaders = {}) => {
-  const headers = {
+  const userEmail = getUserEmail();
+  return {
     "Content-Type": "application/json",
+    ...(userEmail ? { "X-User-Email": userEmail } : {}),
     ...additionalHeaders,
   };
-
-  const userEmail = getUserEmail();
-  if (userEmail) {
-    headers["X-User-Email"] = userEmail;
-  }
-
-  return headers;
 };
 
 // ====== CORE FETCH FUNCTION ======

@@ -3,33 +3,46 @@
 ![React](https://img.shields.io/badge/React-18.3-blue)
 ![Vite](https://img.shields.io/badge/Vite-5.4-purple)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-teal)
-![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Storage-brightgreen)
+![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Realtime-brightgreen)
 
-A web version of the popular **ViMusic** Android app — now with **Google login + cloud sync** via Supabase.
+A sleek, responsive web version of the popular **ViMusic** Android app — featuring **Google OAuth + Real-time Cloud Sync** via Supabase, background lock-screen playback, and seamless audio/video toggling.
 
-Uses the **exact same SQLite schema** as the original app. So, Your playlists, favorites, play counts — everything stays intact.
+Compatible with the **exact same SQLite schema** as the original ViMusic Android app. Your playlists, favorites, and library stay completely intact.
+
+---
 
 ## ✨ Features
 
-- Full cloud sync with google login(Supabase Storage)
-- Guest mode, supports old vimusic databse
-- Favorites, playlists, reorder songs
-- YouTube search (official API)
-- Beautiful player with shuffle/repeat
-- Import / Export `.db` file
+- **🔒 Lock Screen & Background Playback**: Full MediaSession API support with high-resolution album artwork, lock screen playback controls, and headphone button support.
+- **🔄 Instant Song / Video Toggle**: Switch seamlessly between lightweight audio mode and full HD video mode on the fly with a single click.
+- **⚡ Real-time Cloud Sync**: Instant live database synchronization via Supabase Realtime sockets across devices without needing manual refreshes.
+- **🎧 Master's Mix & Favorites**: Curated Master's Mix for guest visitors that converts into your personal Favorites library upon Google login.
+- **📂 Playlist Management**: Create, edit, and organize custom playlists with intuitive add/remove indicators and quick actions.
+- **⌨️ Desktop Keyboard Shortcuts**:
+  - `Space` : Play / Pause
+  - `→` (Right Arrow) : Next Song
+  - `←` (Left Arrow) : Previous Song
+- **🔍 YouTube Search & URL Support**: Search millions of tracks or directly paste YouTube / YouTube Music / Shorts URLs to play instantly.
+- **📱 Responsive Minimized & Maximized Players**: Touch gestures (swipe down to minimize), subtitle support, shuffle, and repeat modes (One / All / Off).
+- **💾 Import / Export Database**: Directly backup or import `.db` files compatible with Android ViMusic.
+
+---
 
 ## 🚀 Tech Stack
 
-**Frontend**: React 18 + Vite + TailwindCSS + Lucide Icons  
-**Backend**: Node.js + Express + better-sqlite3  
-**Auth & Storage**: Supabase (Google OAuth + Storage)  
-**Database**: SQLite (ViMusic Android compatible)
+- **Frontend**: React 18, Vite, TailwindCSS, Lucide Icons, React Hot Toast
+- **Backend**: Node.js, Express, Supabase JS SDK (Serverless / Vercel ready)
+- **Auth & Realtime**: Supabase (Google OAuth + PostgreSQL Realtime)
+- **Database**: PostgreSQL (Supabase) + SQLite `.db` import/export support
 
-## 📦 Installation
+---
+
+## 📦 Installation & Setup
 
 ### Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v18 or higher)
+- npm or yarn
 
 ### 1. Clone Repository
 
@@ -41,115 +54,47 @@ cd vimusic
 ### 2. Backend Setup
 
 ```bash
-# Navigate to backend directory
 cd backend
-
-# Install dependencies
 npm install
 ```
 
-Add the following to `.env`:
+Create a `.env` file in the `backend/` directory:
 
 ```env
-PORT=5000
-
-# Supabase Configuration
-SUPABASE_URL=https://username.supabase.co
+PORT=8080
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
+Start the backend server:
+
 ```bash
-# Start backend server
 npm run dev
 ```
-
-Backend will run on `http://localhost:5000`
 
 ### 3. Frontend Setup
 
 ```bash
-# Navigate to frontend directory (from root)
-cd frontend
-
-# Install dependencies
+cd ../frontend
 npm install
 ```
 
-Add the following to frontend `.env`:
+Create a `.env` file in the `frontend/` directory:
 
 ```env
-VITE_API_URL=http://localhost:5000/api
-
-VITE_YOUTUBE_API_KEY=get_it_from_gcp
-
-# Supabase Configuration
-VITE_SUPABASE_URL=https://username.supabase.co
-VITE_SUPABASE_ANON_KEY=anon_key
+VITE_API_URL=http://localhost:8080/api
+VITE_YOUTUBE_API_KEY=your_youtube_data_api_v3_key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
+Start the frontend development server:
+
 ```bash
-# Start frontend development server
 npm run dev
 ```
 
-Frontend will run on `http://localhost:3000`
-
-## 🗂️ Project Structure
-
-```bash
-|-- backend
-|   |-- package-lock.json
-|   |-- package.json
-|   |-- public
-|   |   +-- database
-|   |       |-- empty.db
-|   |       +-- vimusic.db
-|   |-- scripts
-|   |   |-- syncGuestDatabase.js
-|   |   +-- testSync.js
-|   +-- server.js
-
-|-- eslint.config.js
-
-|-- frontend
-|   |-- index.html
-|   |-- package-lock.json
-|   |-- package.json
-|   |-- postcss.config.js
-|   |-- public
-|   |   +-- images
-|   |       |-- beats.jpeg
-|   |       |-- default.jpg
-|   |       |-- high.jpeg
-|   |       |-- kannada.jpg
-|   |       |-- low.jpeg
-|   |       +-- peace.jpeg
-|   |-- src
-|   |   |-- App.jsx
-|   |   |-- components
-|   |   |   |-- AccountSettingsModal.jsx
-|   |   |   |-- Header.jsx
-|   |   |   |-- LoginModal.jsx
-|   |   |   |-- Player.jsx
-|   |   |   |-- PlaylistCard.jsx
-|   |   |   |-- Sidebar.jsx
-|   |   |   |-- SongCard.jsx
-|   |   |   +-- SortFilter.jsx
-|   |   |-- contexts
-|   |   |   +-- PlayerContext.jsx
-|   |   |-- index.css
-|   |   |-- main.jsx
-|   |   |-- supabase.js
-|   |   +-- utils
-|   |       |-- api.js
-|   |       +-- databaseUtils.js
-|   |-- tailwind.config.js
-|   +-- vite.config.js
-
-|-- LICENSE
-+-- README.md
-
-```
+---
 
 ## 📄 License
 

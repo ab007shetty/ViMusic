@@ -23,7 +23,17 @@ const AppInner = () => {
   const [selectedPlaylistSongs, setSelectedPlaylistSongs] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('favorites');
+  const [activeTab, setActiveTab] = useState(() => {
+    const email = getUserEmail();
+    const savedTab = localStorage.getItem('activeTab');
+    if (email) {
+      return savedTab || 'favorites';
+    }
+    return (savedTab === 'favorites' || !savedTab) ? 'mostPlayed' : savedTab;
+  });
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -47,11 +57,6 @@ const AppInner = () => {
 
   // Persist active tab
   useEffect(() => {
-    const savedTab = localStorage.getItem('activeTab') || 'mostPlayed';
-    setActiveTab(savedTab);
-  }, []);
-
-  useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
@@ -63,7 +68,9 @@ const AppInner = () => {
       const data = await fetchFromServer('favorites', {
         headers: { 'X-User-Email': 'ab007shetty@gmail.com' }
       });
-      setSongs(data.songs || []);
+      if (activeTabRef.current === 'mostPlayed') {
+        setSongs(data.songs || []);
+      }
     } catch (error) {
       console.error("Error fetching Master's Mix:", error);
       toast.error("Failed to load Master's Mix");
@@ -76,7 +83,9 @@ const AppInner = () => {
     setLoading(true);
     try {
       const data = await fetchFromServer('favorites');
-      setSongs(data.songs || []);
+      if (activeTabRef.current === 'favorites') {
+        setSongs(data.songs || []);
+      }
     } catch (error) {
       console.error('Error fetching favorites:', error);
       toast.error('Failed to load favorites');
@@ -228,26 +237,14 @@ const AppInner = () => {
   // Initialize: Check for existing session and restore user email
   useEffect(() => {
     const initializeApp = async () => {
-      const storedEmail = getUserEmail();
-      
-
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setCurrentUser(session.user);
         setUserEmail(session.user.email);
-        const savedTab = localStorage.getItem('activeTab');
-        if (!savedTab || savedTab === 'mostPlayed') {
-          setActiveTab('favorites');
-        } else {
-          setActiveTab(savedTab);
-        }
+        setActiveTab((curr) => (curr === 'mostPlayed' ? 'favorites' : curr));
       } else {
-        const savedTab = localStorage.getItem('activeTab');
-        if (!savedTab || savedTab === 'favorites') {
-          setActiveTab('mostPlayed');
-        } else {
-          setActiveTab(savedTab);
-        }
+        setCurrentUser(null);
+        setActiveTab((curr) => (curr === 'favorites' ? 'mostPlayed' : curr));
       }
     };
 
