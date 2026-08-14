@@ -90,22 +90,52 @@ export const PlayerProvider = ({ children }) => {
 
   useEffect(() => {
     if ('mediaSession' in navigator && currentSong) {
-      // Set lock screen metadata
       navigator.mediaSession.metadata = new window.MediaMetadata({
         title: currentSong.title,
         artist: currentSong.artistsText || 'Unknown Artist',
         album: 'ViMusic',
         artwork: [
-          { src: currentSong.thumbnailUrl, sizes: '512x512', type: 'image/jpeg' }
+          { src: currentSong.thumbnailUrl?.replace(/w60-h60/, 'w512-h512') || '', sizes: '512x512', type: 'image/jpeg' }
         ]
       });
 
-      // Bind hardware buttons (volume hold, headphone buttons, lock screen)
       navigator.mediaSession.setActionHandler('play', () => handlersRef.current.togglePlay?.());
       navigator.mediaSession.setActionHandler('pause', () => handlersRef.current.togglePlay?.());
       navigator.mediaSession.setActionHandler('previoustrack', () => handlersRef.current.playPrevious?.());
       navigator.mediaSession.setActionHandler('nexttrack', () => handlersRef.current.playNext?.());
     }
+  }, [currentSong]);
+
+  // Keep Media Session playback state in sync (controls lock screen play/pause icon)
+  useEffect(() => {
+    if ('mediaSession' in navigator && currentSong) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying, currentSong]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // Space = play/pause, ArrowLeft = previous, ArrowRight = next
+  // Only fires when the user isn't typing in an input/textarea
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      if (!currentSong) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault(); // stop page scroll
+        handlersRef.current.togglePlay?.();
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        handlersRef.current.playNext?.();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        handlersRef.current.playPrevious?.();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [currentSong]);
 
   const playSong = (song) => {

@@ -9,24 +9,19 @@ let currentUserEmail = null;
 
 // ====== USER SESSION MANAGEMENT ======
 export const setUserEmail = (email) => {
-  console.log(`📧 Setting user email: ${email || "null (guest mode)"}`);
   currentUserEmail = email;
   if (email) {
     localStorage.setItem("userEmail", email);
-    console.log("✅ User email saved to localStorage");
   } else {
     localStorage.removeItem("userEmail");
-    console.log("✅ User email removed from localStorage");
   }
 };
 
 export const getUserEmail = () => {
-  // Always try to get from localStorage first if not in memory
   if (!currentUserEmail) {
     const stored = localStorage.getItem("userEmail");
     if (stored) {
       currentUserEmail = stored;
-      console.log(`📧 Restored user email from localStorage: ${stored}`);
     }
   }
   return currentUserEmail;
@@ -43,13 +38,9 @@ const getHeaders = (additionalHeaders = {}) => {
     ...additionalHeaders,
   };
 
-  // CRITICAL: Always get latest user email
   const userEmail = getUserEmail();
   if (userEmail) {
     headers["X-User-Email"] = userEmail;
-    console.log(`🔐 [API] Adding X-User-Email header: ${userEmail}`);
-  } else {
-    console.log(`👤 [API] No user email - sending as GUEST (no header)`);
   }
 
   return headers;
@@ -58,7 +49,6 @@ const getHeaders = (additionalHeaders = {}) => {
 // ====== CORE FETCH FUNCTION ======
 export const fetchFromServer = async (endpoint, options = {}) => {
   try {
-    // Merge headers with user auth
     const headers = getHeaders(options.headers);
 
     const response = await fetch(`${API_BASE}/${endpoint}`, {
@@ -68,13 +58,11 @@ export const fetchFromServer = async (endpoint, options = {}) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ API Error ${response.status}:`, errorText);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error(`❌ API Error on ${endpoint}:`, error);
     throw error;
   }
 };

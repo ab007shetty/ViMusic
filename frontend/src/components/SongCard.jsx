@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Heart, Plus, ExternalLink, Play, X } from 'lucide-react';
 import { fetchFromServer, isLoggedIn } from '../utils/api';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -13,6 +14,8 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
   const [showControls, setShowControls] = useState(false);
   const playlistRef = useRef(null);
   const cardRef = useRef(null);
+  const plusBtnRef = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   
   const enhancedThumbnailUrl = song.thumbnailUrl?.replace(/w60-h60/, 'w544-h544') || '/images/default.jpg';
 
@@ -20,39 +23,70 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
     setIsFavorite(song.likedAt !== null && song.likedAt !== undefined);
   }, [song]);
 
-  // Close playlist dropdown when clicking outside
+  // Close playlist dropdown when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (playlistRef.current && !playlistRef.current.contains(event.target)) {
+      // Check the portal dropdown element via data attribute
+      const portalEl = document.getElementById(`playlist-portal-${song.id}`);
+      if (
+        playlistRef.current && !playlistRef.current.contains(event.target) &&
+        (!portalEl || !portalEl.contains(event.target))
+      ) {
         setShowPlaylists(false);
       }
       if (cardRef.current && !cardRef.current.contains(event.target)) {
         setShowControls(false);
       }
     };
+    const handleScroll = () => setShowPlaylists(false);
 
     if (showPlaylists || showControls) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
+      window.addEventListener('scroll', handleScroll, true);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
     };
-  }, [showPlaylists, showControls]);
+  }, [showPlaylists, showControls, song.id]);
 
   const fetchPlaylists = async () => {
+    if (showPlaylists) {
+      setShowPlaylists(false);
+      return;
+    }
     try {
-      // Fetch all playlists
-      const playlistData = await fetchFromServer('playlists');
-      setPlaylists(playlistData.playlists || []);
+      // Calculate position from the + button before opening
+      if (plusBtnRef.current) {
+        const rect = plusBtnRef.current.getBoundingClientRect();
+        const DROPDOWN_WIDTH = 176; // w-44
+        const DROPDOWN_HEIGHT = 240;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
 
-      // Fetch playlists this song belongs to
-      const songPlaylistData = await fetchFromServer(`songs/${song.id}/playlists`);
+        // Try placing to the right of button; fall back to left
+        let left = rect.right + 8;
+        if (left + DROPDOWN_WIDTH > viewportWidth - 8) {
+          left = rect.left - DROPDOWN_WIDTH - 8;
+        }
+        // Try placing below; fall back to above
+        let top = rect.top;
+        if (top + DROPDOWN_HEIGHT > viewportHeight - 8) {
+          top = rect.bottom - DROPDOWN_HEIGHT;
+        }
+        setDropdownPos({ top, left });
+      }
+
+      const [playlistData, songPlaylistData] = await Promise.all([
+        fetchFromServer('playlists'),
+        fetchFromServer(`songs/${song.id}/playlists`),
+      ]);
+      setPlaylists(playlistData.playlists || []);
       setSongPlaylists(songPlaylistData.playlists || []);
-      
-      setShowPlaylists(!showPlaylists);
+      setShowPlaylists(true);
     } catch (error) {
       console.error('Error fetching playlists:', error);
       toast.error('Failed to load playlists');
@@ -220,6 +254,7 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
           {isLoggedIn() && (
             <div className="relative" ref={playlistRef}>
               <button
+                ref={plusBtnRef}
                 onClick={(e) => {
                   e.stopPropagation();
                   fetchPlaylists();
@@ -229,65 +264,73 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
               >
                 <Plus size={20} className="text-white" />
               </button>
-              
-              {showPlaylists && (
-                <div 
-                  className="absolute left-full ml-2 top-0 bg-gray-900/95 backdrop-blur-xl rounded-xl border border-gray-600 shadow-2xl z-[9999] w-40 overflow-hidden"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Header */}
-                  <div className="px-2.5 py-2 border-b border-gray-700 bg-gray-800/50">
-                    <h4 className="text-xs font-semibold text-white">Add to Playlist</h4>
-                  </div>
-
-                  {/* Scrollable Playlist List - Always show scrollbar */}
-                  <div className="h-48 overflow-y-scroll custom-scrollbar">
-                    {playlists.length > 0 ? (
-                      <div className="p-2 space-y-1">
-                        {playlists.map((playlist) => {
-                          const inPlaylist = isInPlaylist(playlist.id);
-                          return (
-                            <div
-                              key={playlist.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!inPlaylist) {
-                                  handleAddToPlaylist(playlist.id);
-                                }
-                              }}
-                              className={`flex items-center justify-between px-2.5 py-2 rounded-lg transition-all ${
-                                inPlaylist
-                                  ? 'bg-green-500/20 border border-green-500/50 cursor-default'
-                                  : 'hover:bg-gray-800 border border-transparent cursor-pointer hover:border-gray-600'
-                              }`}
-                            >
-                              <span className={`flex-1 text-xs font-medium truncate ${
-                                inPlaylist ? 'text-green-400' : 'text-white'
-                              }`}>
-                                {playlist.name}
-                              </span>
-                              {inPlaylist && (
-                                <button
-                                  onClick={(e) => handleRemoveFromPlaylist(playlist.id, e)}
-                                  className="ml-1.5 p-0.5 hover:bg-red-500/30 rounded-full transition-colors flex-shrink-0"
-                                  title="Remove from playlist"
-                                >
-                                  <X size={14} className="text-red-400" />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="p-3 text-center">
-                        <p className="text-xs text-gray-400">No playlists available</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
+          )}
+
+          {/* Playlist dropdown rendered as a Portal on document.body to escape clipping */}
+          {showPlaylists && isLoggedIn() && ReactDOM.createPortal(
+            <div
+              id={`playlist-portal-${song.id}`}
+              className="fixed bg-gray-900 rounded-xl border border-gray-600 shadow-2xl w-44 overflow-hidden"
+              style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 99999 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-3 py-2 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-white">Add to Playlist</h4>
+                <button
+                  onClick={() => setShowPlaylists(false)}
+                  className="p-0.5 hover:bg-gray-700 rounded-full transition-colors"
+                >
+                  <X size={12} className="text-gray-400" />
+                </button>
+              </div>
+
+              {/* Scrollable Playlist List */}
+              <div className="max-h-52 overflow-y-auto custom-scrollbar">
+                {playlists.length > 0 ? (
+                  <div className="p-2 space-y-1">
+                    {playlists.map((playlist) => {
+                      const inPlaylist = isInPlaylist(playlist.id);
+                      return (
+                        <div
+                          key={playlist.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!inPlaylist) handleAddToPlaylist(playlist.id);
+                          }}
+                          className={`flex items-center justify-between px-2.5 py-2 rounded-lg transition-all ${
+                            inPlaylist
+                              ? 'bg-green-500/20 border border-green-500/50 cursor-default'
+                              : 'hover:bg-gray-800 border border-transparent cursor-pointer hover:border-gray-600'
+                          }`}
+                        >
+                          <span className={`flex-1 text-xs font-medium truncate ${
+                            inPlaylist ? 'text-green-400' : 'text-white'
+                          }`}>
+                            {playlist.name}
+                          </span>
+                          {inPlaylist && (
+                            <button
+                              onClick={(e) => handleRemoveFromPlaylist(playlist.id, e)}
+                              className="ml-1.5 p-0.5 hover:bg-red-500/30 rounded-full transition-colors flex-shrink-0"
+                              title="Remove from playlist"
+                            >
+                              <X size={13} className="text-red-400" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-3 text-center">
+                    <p className="text-xs text-gray-400">No playlists yet</p>
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body
           )}
         </div>
 

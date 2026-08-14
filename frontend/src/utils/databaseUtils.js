@@ -14,7 +14,6 @@ const getUsername = (email) => {
  */
 export const switchToUserDatabase = async (userEmail) => {
   try {
-    console.log(`🔄 Switching to database for ${userEmail}...`);
 
     const response = await fetch(`${API_BASE}/login/${userEmail}`, {
       method: "POST",
@@ -32,7 +31,6 @@ export const switchToUserDatabase = async (userEmail) => {
     }
 
     const data = await response.json();
-    console.log("✅ Database switched:", data.message);
 
     return {
       success: true,
@@ -62,7 +60,6 @@ export const handleDatabaseImport = async (userEmail, file) => {
   }
 
   try {
-    console.log(`📥 Sending database file to backend...`);
 
     const response = await fetch(`${API_BASE}/import-database/${userEmail}`, {
       method: "POST",
@@ -79,7 +76,6 @@ export const handleDatabaseImport = async (userEmail, file) => {
     }
 
     const data = await response.json();
-    console.log("✅ Import complete:", data.message);
 
     return {
       success: true,
@@ -96,7 +92,6 @@ export const handleDatabaseImport = async (userEmail, file) => {
  * Returns the direct URL to the backend's export endpoint.
  */
 export const getDatabaseDownloadUrl = async (userEmail) => {
-  console.log(`🔗 Getting download URL for ${userEmail}...`);
   // The backend's GET endpoint returns the .db binary directly.
   return `${API_BASE}/export-database/${userEmail}`;
 };
@@ -107,7 +102,6 @@ export const getDatabaseDownloadUrl = async (userEmail) => {
  */
 export const syncDatabaseToCloud = async (userEmail) => {
   try {
-    console.log(`☁️ Logging out ${userEmail}...`);
 
     const response = await fetch(`${API_BASE}/logout/${userEmail}`, {
       method: "POST",
@@ -118,7 +112,6 @@ export const syncDatabaseToCloud = async (userEmail) => {
     });
 
     if (!response.ok) {
-      console.warn("⚠️ Logout warning from server");
     }
 
     return {

@@ -75,7 +75,7 @@ const Sidebar = ({
           <div className="text-center text-sm text-gray-400">
             Made with ❤️ by{' '}
             <a
-              href="https://abshetty.in"
+              href="https://abshetty.com"
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-cyan-400 hover:text-cyan-300 underline-offset-2 hover:underline transition"

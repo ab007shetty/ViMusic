@@ -140,7 +140,6 @@ const AppInner = () => {
   // Playlist Management Functions
   const handleCreatePlaylist = async (playlistName) => {
     try {
-      console.log('Creating playlist:', playlistName);
       
       const response = await fetchFromServer('playlists', {
         method: 'POST',
@@ -150,7 +149,6 @@ const AppInner = () => {
         body: JSON.stringify({ name: playlistName }),
       });
       
-      console.log('Playlist created:', response);
       toast.success(`Playlist "${playlistName}" created!`);
       await fetchPlaylists(); // Refresh playlists
       
@@ -232,9 +230,6 @@ const AppInner = () => {
     const initializeApp = async () => {
       const storedEmail = getUserEmail();
       
-      if (storedEmail) {
-        console.log('📍 Restoring session for:', storedEmail);
-      }
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
