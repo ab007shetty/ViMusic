@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Plus, ExternalLink, Play, X } from 'lucide-react';
-import { fetchFromServer } from '../utils/api';
+import { fetchFromServer, isLoggedIn } from '../utils/api';
 import { usePlayer } from '../contexts/PlayerContext';
 import toast from 'react-hot-toast';
 
@@ -98,6 +98,10 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
       totalPlayTimeMs: 0,
     };
 
+    // Optimistically add to songPlaylists immediately
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (playlist) setSongPlaylists(prev => [...prev, playlist]);
+
     try {
       await fetchFromServer(`playlists/${playlistId}/songs/${song.id}`, {
         method: 'POST',
@@ -105,14 +109,14 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
         body: JSON.stringify(songData),
       });
       toast.success('Added to playlist');
-      
-      // Refresh the playlists to show updated state
-      const songPlaylistData = await fetchFromServer(`songs/${song.id}/playlists`);
-      setSongPlaylists(songPlaylistData.playlists || []);
     } catch (error) {
+      // Revert optimistic update on failure
+      setSongPlaylists(prev => prev.filter(p => p.id !== playlistId));
       console.error('Error adding to playlist:', error);
-      if (error.message.includes('already in playlist')) {
+      if (error.message?.includes('already in playlist') || error.message?.includes('400')) {
         toast.error('Song already in this playlist');
+        // Re-add it back since it's already there
+        if (playlist) setSongPlaylists(prev => [...prev, playlist]);
       } else {
         toast.error('Failed to add to playlist');
       }
@@ -122,16 +126,18 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
   const handleRemoveFromPlaylist = async (playlistId, e) => {
     e.stopPropagation();
     
+    // Optimistically remove from songPlaylists immediately
+    setSongPlaylists(prev => prev.filter(p => p.id !== playlistId));
+
     try {
       await fetchFromServer(`playlists/${playlistId}/songs/${song.id}`, {
         method: 'DELETE',
       });
       toast.success('Removed from playlist');
-      
-      // Refresh the playlists to show updated state
+    } catch (error) {
+      // Revert optimistic update on failure
       const songPlaylistData = await fetchFromServer(`songs/${song.id}/playlists`);
       setSongPlaylists(songPlaylistData.playlists || []);
-    } catch (error) {
       console.error('Error removing from playlist:', error);
       toast.error('Failed to remove from playlist');
     }
@@ -157,9 +163,13 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
     }
   };
 
-  const openInYouTubeMusic = (e) => {
+  const openInPlatform = (e) => {
     e.stopPropagation();
-    window.open(`https://music.youtube.com/watch?v=${song.id}`, '_blank');
+    if (song.source === 'youtube') {
+      window.open(`https://www.youtube.com/watch?v=${song.id}`, '_blank');
+    } else {
+      window.open(`https://music.youtube.com/watch?v=${song.id}`, '_blank');
+    }
   };
 
   const isInPlaylist = (playlistId) => {
@@ -194,94 +204,113 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
 
         {/* Top Controls */}
         <div className={`absolute top-2 left-2 flex flex-col space-y-2 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <button
-            onClick={handleFavoriteToggle}
-            className="p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-transform"
-            title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-          >
-            <Heart
-              size={20}
-              className={isFavorite ? 'fill-red-500 text-red-500' : 'text-white'}
-            />
-          </button>
-
-          <div className="relative" ref={playlistRef}>
+          {isLoggedIn() && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                fetchPlaylists();
-              }}
+              onClick={handleFavoriteToggle}
               className="p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-transform"
-              title="Manage Playlists"
+              title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
             >
-              <Plus size={20} className="text-white" />
+              <Heart
+                size={20}
+                className={isFavorite ? 'fill-red-500 text-red-500' : 'text-white'}
+              />
             </button>
+          )}
 
-            {showPlaylists && (
-              <div 
-                className="absolute left-full ml-2 top-0 bg-gray-900/95 backdrop-blur-xl rounded-xl border border-gray-600 shadow-2xl z-[9999] w-40 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
+          {isLoggedIn() && (
+            <div className="relative" ref={playlistRef}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchPlaylists();
+                }}
+                className="p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-transform"
+                title="Manage Playlists"
               >
-                {/* Header */}
-                <div className="px-2.5 py-2 border-b border-gray-700 bg-gray-800/50">
-                  <h4 className="text-xs font-semibold text-white">Add to Playlist</h4>
-                </div>
+                <Plus size={20} className="text-white" />
+              </button>
+              
+              {showPlaylists && (
+                <div 
+                  className="absolute left-full ml-2 top-0 bg-gray-900/95 backdrop-blur-xl rounded-xl border border-gray-600 shadow-2xl z-[9999] w-40 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div className="px-2.5 py-2 border-b border-gray-700 bg-gray-800/50">
+                    <h4 className="text-xs font-semibold text-white">Add to Playlist</h4>
+                  </div>
 
-                {/* Scrollable Playlist List - Always show scrollbar */}
-                <div className="h-48 overflow-y-scroll custom-scrollbar">
-                  {playlists.length > 0 ? (
-                    <div className="p-2 space-y-1">
-                      {playlists.map((playlist) => {
-                        const inPlaylist = isInPlaylist(playlist.id);
-                        return (
-                          <div
-                            key={playlist.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!inPlaylist) {
-                                handleAddToPlaylist(playlist.id);
-                              }
-                            }}
-                            className={`flex items-center justify-between px-2.5 py-2 rounded-lg transition-all ${
-                              inPlaylist
-                                ? 'bg-green-500/20 border border-green-500/50 cursor-default'
-                                : 'hover:bg-gray-800 border border-transparent cursor-pointer hover:border-gray-600'
-                            }`}
-                          >
-                            <span className={`flex-1 text-xs font-medium truncate ${
-                              inPlaylist ? 'text-green-400' : 'text-white'
-                            }`}>
-                              {playlist.name}
-                            </span>
-                            {inPlaylist && (
-                              <button
-                                onClick={(e) => handleRemoveFromPlaylist(playlist.id, e)}
-                                className="ml-1.5 p-0.5 hover:bg-red-500/30 rounded-full transition-colors flex-shrink-0"
-                                title="Remove from playlist"
-                              >
-                                <X size={14} className="text-red-400" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="p-3 text-center">
-                      <p className="text-xs text-gray-400">No playlists available</p>
-                    </div>
-                  )}
+                  {/* Scrollable Playlist List - Always show scrollbar */}
+                  <div className="h-48 overflow-y-scroll custom-scrollbar">
+                    {playlists.length > 0 ? (
+                      <div className="p-2 space-y-1">
+                        {playlists.map((playlist) => {
+                          const inPlaylist = isInPlaylist(playlist.id);
+                          return (
+                            <div
+                              key={playlist.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!inPlaylist) {
+                                  handleAddToPlaylist(playlist.id);
+                                }
+                              }}
+                              className={`flex items-center justify-between px-2.5 py-2 rounded-lg transition-all ${
+                                inPlaylist
+                                  ? 'bg-green-500/20 border border-green-500/50 cursor-default'
+                                  : 'hover:bg-gray-800 border border-transparent cursor-pointer hover:border-gray-600'
+                              }`}
+                            >
+                              <span className={`flex-1 text-xs font-medium truncate ${
+                                inPlaylist ? 'text-green-400' : 'text-white'
+                              }`}>
+                                {playlist.name}
+                              </span>
+                              {inPlaylist && (
+                                <button
+                                  onClick={(e) => handleRemoveFromPlaylist(playlist.id, e)}
+                                  className="ml-1.5 p-0.5 hover:bg-red-500/30 rounded-full transition-colors flex-shrink-0"
+                                  title="Remove from playlist"
+                                >
+                                  <X size={14} className="text-red-400" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-3 text-center">
+                        <p className="text-xs text-gray-400">No playlists available</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Source badge — YouTube vs YouTube Music */}
+        {song.source && (
+          <div className="absolute bottom-2 right-2">
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-sm ${
+                song.source === 'youtube'
+                  ? 'bg-red-600/80 text-white'
+                  : 'bg-red-500/80 text-white'
+              }`}
+            >
+              {song.source === 'youtube' ? '▶ YT' : '♫ YTM'}
+            </span>
+          </div>
+        )}
 
         {/* External Link */}
         <button
-          onClick={openInYouTubeMusic}
+          onClick={openInPlatform}
           className={`absolute top-2 right-2 p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-all ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-          title="Open in YouTube Music"
+          title={song.source === 'youtube' ? 'Open in YouTube' : 'Open in YouTube Music'}
         >
           <ExternalLink size={18} className="text-white" />
         </button>

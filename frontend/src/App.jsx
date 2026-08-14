@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlayerProvider } from './contexts/PlayerContext';
+import { usePlayer } from './contexts/PlayerContext';
 import { fetchFromServer, setUserEmail, getUserEmail } from './utils/api';
+import { fetchVideoMetadata } from './utils/youtubeUtils';
 import { Loader, X, Plus } from 'lucide-react';
 import { supabase } from './supabase';
 import { switchToUserDatabase } from './utils/databaseUtils';
@@ -14,8 +16,9 @@ import PlaylistCard from './components/PlaylistCard';
 import SortFilter from './components/SortFilter';
 import { CreatePlaylistModal, EditPlaylistModal, DeletePlaylistModal } from './components/PlaylistModals';
 
-const App = () => {
+const AppInner = () => {
   const [songs, setSongs] = useState([]);
+  const { playSong, setIsExpanded } = usePlayer();
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylistSongs, setSelectedPlaylistSongs] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -85,7 +88,9 @@ const App = () => {
   const fetchSongsForPlaylist = useCallback(async (playlistId) => {
     setLoading(true);
     try {
-      const data = await fetchFromServer(`playlists/${playlistId}/songs`);
+      const email = getUserEmail();
+      const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
+      const data = await fetchFromServer(`playlists/${playlistId}/songs`, { headers });
       setSelectedPlaylistSongs(data.songs || []);
     } catch (error) {
       console.error('Error fetching playlist songs:', error);
@@ -95,10 +100,12 @@ const App = () => {
     }
   }, []);
 
-  const fetchPlaylists = useCallback(async () => {
+  const fetchPlaylists = useCallback(async (opts = {}) => {
     setLoading(true);
     try {
-      const data = await fetchFromServer('playlists');
+      const email = getUserEmail();
+      const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
+      const data = await fetchFromServer('playlists', { headers });
       const imageMap = {
         'High': '/images/high.jpeg',
         'Low': '/images/low.jpeg',
@@ -114,10 +121,13 @@ const App = () => {
       
       setPlaylists(playlistsWithImages);
 
-      const highPlaylist = playlistsWithImages.find((p) => p.name === 'High');
-      if (highPlaylist) {
-        setActivePlaylistId(highPlaylist.id);
-        fetchSongsForPlaylist(highPlaylist.id);
+      // Always auto-select the first playlist on initial load
+      if (playlistsWithImages.length > 0 && !opts.skipAutoSelect) {
+        setActivePlaylistId((current) => {
+          const targetId = current || playlistsWithImages[0].id;
+          fetchSongsForPlaylist(targetId);
+          return targetId;
+        });
       }
     } catch (error) {
       console.error('Error fetching playlists:', error);
@@ -230,6 +240,19 @@ const App = () => {
       if (session?.user) {
         setCurrentUser(session.user);
         setUserEmail(session.user.email);
+        const savedTab = localStorage.getItem('activeTab');
+        if (!savedTab || savedTab === 'mostPlayed') {
+          setActiveTab('favorites');
+        } else {
+          setActiveTab(savedTab);
+        }
+      } else {
+        const savedTab = localStorage.getItem('activeTab');
+        if (!savedTab || savedTab === 'favorites') {
+          setActiveTab('mostPlayed');
+        } else {
+          setActiveTab(savedTab);
+        }
       }
     };
 
@@ -262,6 +285,7 @@ const App = () => {
             toast.success('Welcome! Your account is ready.', { duration: 4000 });
             setTimeout(() => window.location.reload(), 1500);
           } else {
+            setActiveTab('favorites');
             toast.success('Welcome back!');
             setTimeout(() => refreshCurrentView(), 500);
           }
@@ -275,23 +299,67 @@ const App = () => {
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setUserEmail(null);
+        setActiveTab('mostPlayed');
       }
     });
 
     return () => subscription.unsubscribe();
   }, [refreshCurrentView]);
 
-  // Search handler
+  // ── Supabase Realtime: keep data in sync instantly ─────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'song' }, () => {
+        // Refresh whichever tab is active
+        if (activeTab === 'favorites') fetchFavorites();
+        else if (activeTab === 'mostPlayed') fetchSongs();
+        else if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'song_playlist_map' }, () => {
+        if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist' }, () => {
+        fetchPlaylists({ skipAutoSelect: true });
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [activeTab, activePlaylistId, fetchFavorites, fetchSongs, fetchSongsForPlaylist, fetchPlaylists]);
+
+  // Search a song directly from a YouTube/YouTube Music URL (strip ID → fetch metadata → show as result)
+  const handleUrlSearch = useCallback(async (videoId, source, isShort = false) => {
+    setIsSearching(true);
+    setLoading(true);
+    setIsExpanded(false);
+    const loadingToast = toast.loading('Fetching video details...');
+    try {
+      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+      const song = await fetchVideoMetadata(videoId, apiKey, source, isShort);
+      toast.dismiss(loadingToast);
+      setSearchResults([song]);
+    } catch (error) {
+      console.error('Error loading video from URL:', error);
+      toast.dismiss(loadingToast);
+      toast.error('Could not load that video. Check the URL and try again.');
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Search handler — searches all YouTube videos (not just music category)
   const handleSearch = useCallback(async (query) => {
     setIsSearching(true);
     setLoading(true);
+    setIsExpanded(false);
     
     const searchToast = toast.loading('Searching...');
     
     try {
       const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
       const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&videoCategoryId=10&key=${apiKey}`
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&key=${apiKey}`
       );
       const data = await response.json();
       
@@ -304,6 +372,8 @@ const App = () => {
           artistsText: item.snippet.channelTitle,
           thumbnailUrl: item.snippet.thumbnails.high.url,
           durationText: '',
+          source: 'youtube',
+          isVideo: true,
         }));
         setSearchResults(formattedResults);
         toast.success(`Found ${formattedResults.length} results`);
@@ -330,6 +400,7 @@ const App = () => {
     setCurrentSort('addedOn');
     setSortOrder('desc');
     setLocalSearchQuery('');
+    setIsExpanded(false);
   }, [handleClearSearch]);
 
   const handleViewMostPlayed = useCallback(() => {
@@ -338,6 +409,7 @@ const App = () => {
     setCurrentSort('addedOn');
     setSortOrder('desc');
     setLocalSearchQuery('');
+    setIsExpanded(false);
   }, [handleClearSearch]);
 
   const handleViewFavorites = useCallback(() => {
@@ -346,6 +418,7 @@ const App = () => {
     setCurrentSort('addedOn');
     setSortOrder('desc');
     setLocalSearchQuery('');
+    setIsExpanded(false);
   }, [handleClearSearch]);
 
   const handlePlaylistClick = useCallback((playlistId) => {
@@ -422,7 +495,7 @@ const App = () => {
   }, [playlists, activePlaylistId]);
 
   return (
-    <PlayerProvider>
+    <>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -478,6 +551,7 @@ const App = () => {
       <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
         <Header
           onSearch={handleSearch}
+          onUrlSearch={handleUrlSearch}
           onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           sidebarOpen={isSidebarOpen}
         />
@@ -489,9 +563,10 @@ const App = () => {
           onViewMostPlayed={handleViewMostPlayed}
           onViewFavorites={handleViewFavorites}
           activeTab={activeTab}
+          isGuest={!currentUser}
         />
 
-        <div className={`flex-1 flex flex-col overflow-hidden pt-16 transition-all duration-300 ${isSidebarOpen ? 'md:ml-56' : 'ml-0'}`}>
+        <div className={`flex-1 flex flex-col relative overflow-hidden pt-16 transition-all duration-300 ${isSidebarOpen ? 'md:ml-56' : 'ml-0'}`}>
           <main className="flex-1 overflow-y-auto pb-32">
             <div className="px-4 md:px-6 py-4">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
@@ -503,11 +578,11 @@ const App = () => {
                       ? "Master's Mix"
                       : activeTab === 'playlists'
                       ? `${activePlaylistName} Songs`
-                      : 'Your Favorites'}
+                      : 'My Favorites'}
                   </h2>
                   
-                  {/* Circular Plus Button - Only visible in playlist tab on desktop */}
-                  {activeTab === 'playlists' && (
+                  {/* Circular Plus Button - Only visible in playlist tab on desktop for logged-in users */}
+                  {activeTab === 'playlists' && currentUser && (
                     <button
                       onClick={() => setShowCreateModal(true)}
                       className="hidden md:flex items-center justify-center w-10 h-10 bg-green-600 hover:bg-green-700 rounded-full transition-all duration-200 shadow-lg hover:scale-110 hover:shadow-green-500/30"
@@ -571,6 +646,7 @@ const App = () => {
                             isActive={playlist.id === activePlaylistId}
                             onEdit={openEditModal}
                             onDelete={openDeleteModal}
+                            isReadOnly={!currentUser}
                           />
                         ))}
                       </div>
@@ -607,8 +683,14 @@ const App = () => {
           <Player />
         </div>
       </div>
-    </PlayerProvider>
+    </>
   );
 };
+
+const App = () => (
+  <PlayerProvider>
+    <AppInner />
+  </PlayerProvider>
+);
 
 export default App;

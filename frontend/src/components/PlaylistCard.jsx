@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 
-const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete }) => {
+const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete, isReadOnly }) => {
   const [showActions, setShowActions] = useState(false);
 
   const handleEdit = (e) => {
@@ -42,23 +42,25 @@ const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete }) => {
           {playlist.name}
         </h3>
         
-        {/* Circular action buttons - hidden on mobile */}
-        <div className={`hidden md:flex items-center gap-2 transition-opacity duration-200 ${showActions ? 'opacity-100' : 'opacity-0'}`}>
-          <button
-            onClick={handleEdit}
-            className="w-7 h-7 rounded-full bg-blue-500/90 hover:bg-blue-500 transition-all duration-200 flex items-center justify-center shadow-lg hover:scale-110"
-            title="Edit playlist"
-          >
-            <Pencil size={14} className="text-white" />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="w-7 h-7 rounded-full bg-red-500/90 hover:bg-red-500 transition-all duration-200 flex items-center justify-center shadow-lg hover:scale-110"
-            title="Delete playlist"
-          >
-            <Trash2 size={14} className="text-white" />
-          </button>
-        </div>
+        {/* Circular action buttons - hidden on mobile and for read-only guests */}
+        {!isReadOnly && (
+          <div className={`hidden md:flex items-center gap-2 transition-opacity duration-200 ${showActions ? 'opacity-100' : 'opacity-0'}`}>
+            <button
+              onClick={handleEdit}
+              className="w-7 h-7 rounded-full bg-blue-500/90 hover:bg-blue-500 transition-all duration-200 flex items-center justify-center shadow-lg hover:scale-110"
+              title="Edit playlist"
+            >
+              <Pencil size={14} className="text-white" />
+            </button>
+            <button
+              onClick={handleDelete}
+              className="w-7 h-7 rounded-full bg-red-500/90 hover:bg-red-500 transition-all duration-200 flex items-center justify-center shadow-lg hover:scale-110"
+              title="Delete playlist"
+            >
+              <Trash2 size={14} className="text-white" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

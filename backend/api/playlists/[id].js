@@ -20,17 +20,21 @@ export default async function handler(req, res) {
   const urlPath = req.url.split("?")[0]; // strip query
   const parts = urlPath.split("/").filter(Boolean);
   // parts = ['api', 'playlists', ':id', ...rest]
-  const playlistIdStr = req.query.id;
-  const playlistId = parseInt(playlistIdStr, 10);
+  const playlistIdStr = req.query?.id || parts[2];
+  const playlistId = Number(playlistIdStr);
 
-  if (!playlistId || isNaN(playlistId)) {
+  if (!playlistIdStr || isNaN(playlistId)) {
+    console.error("Invalid playlist id — raw query:", req.query, "parts:", parts);
     return res.status(400).json({ error: "Invalid playlist id" });
   }
 
   // Determine if this is a /songs or /songs/:songId sub-route
   const afterId = parts.slice(3); // everything after 'playlists/:id'
   const isSongsRoute = afterId[0] === "songs";
-  const songId = afterId[1] || null;
+  let songId = afterId[1] || null;
+  if (!songId || songId === "undefined") {
+    songId = req.body?.songId || req.body?.id || null;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // GET /api/playlists/:id/songs

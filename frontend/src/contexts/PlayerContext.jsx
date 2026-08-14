@@ -22,6 +22,8 @@ export const PlayerProvider = ({ children }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState('off'); // 'off', 'one', 'all'
+  const [isVideoMode, setIsVideoMode] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   
   const playerRef = useRef(null);
   const progressInterval = useRef(null);
@@ -111,6 +113,8 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(true);
     setProgress(0);
     setDuration(0);
+    setIsVideoMode(false); // always start in audio mode
+    setIsExpanded(true); // Auto-expand when a new song is clicked
     toast.success(`Now playing: ${song.title}`);
   };
 
@@ -121,6 +125,7 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(true);
     setProgress(0);
     setDuration(0);
+    setIsVideoMode(false);
   };
 
   const togglePlay = () => {
@@ -154,6 +159,7 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(true);
     setProgress(0);
     setDuration(0);
+    setIsVideoMode(false);
   };
 
   const playPrevious = () => {
@@ -165,6 +171,7 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(true);
     setProgress(0);
     setDuration(0);
+    setIsVideoMode(false);
   };
 
   const seekTo = (percent) => {
@@ -203,6 +210,10 @@ export const PlayerProvider = ({ children }) => {
     toast.success(`Repeat: ${nextMode}`);
   };
 
+  const toggleVideoMode = () => {
+    setIsVideoMode(prev => !prev);
+  };
+
   const addToQueue = (song) => {
     setQueue([...queue, song]);
     toast.success('Added to queue');
@@ -239,6 +250,8 @@ export const PlayerProvider = ({ children }) => {
     setDuration(0);
     setQueue([]);
     setCurrentIndex(0);
+    setIsVideoMode(false);
+    setIsExpanded(false);
     playerRef.current = null;
   };
 
@@ -252,6 +265,8 @@ export const PlayerProvider = ({ children }) => {
     currentIndex,
     shuffle,
     repeat,
+    isVideoMode,
+    isExpanded,
     playerRef,
     playSong,
     playQueue,
@@ -262,12 +277,14 @@ export const PlayerProvider = ({ children }) => {
     changeVolume,
     toggleShuffle,
     toggleRepeat,
+    toggleVideoMode,
     addToQueue,
     removeFromQueue,
     closePlayer,
     setIsPlaying,
     setProgress,
     setDuration,
+    setIsExpanded,
   };
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

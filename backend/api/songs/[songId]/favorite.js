@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   const userId = getUserId(req);
-  const songId = req.query.songId;
+  const songId = req.query.songId || req.body.songId;
   const {
     title,
     artistsText,
@@ -68,6 +68,6 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error("❌ Error toggling favorite:", error);
-    return res.status(500).json({ error: "Failed to toggle favorite" });
+    return res.status(500).json({ error: "Failed to toggle favorite", details: error.message, more: error.details });
   }
 }

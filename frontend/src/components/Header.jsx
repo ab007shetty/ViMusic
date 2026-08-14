@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, Menu, X } from 'lucide-react';
 import { supabase, signInWithGoogle, signOut as supabaseSignOut } from '../supabase';
 import toast from 'react-hot-toast';
+import { parseYouTubeUrl } from '../utils/youtubeUtils';
 import { uploadEmptyDatabase } from '../utils/databaseUtils';
 import AccountSettingsModal from './AccountSettingsModal';
 
-const Header = ({ onSearch, onSidebarToggle, sidebarOpen }) => {
+const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
   const [query, setQuery] = useState('');
   const [user, setUser] = useState(null);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -26,10 +27,17 @@ const Header = ({ onSearch, onSidebarToggle, sidebarOpen }) => {
   }, []);
 
   const handleSearch = () => {
-    if (query.trim()) {
-      onSearch?.(query);
-      setShowSearchInput(false);
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    // Check if the user pasted a YouTube or YouTube Music URL
+    const parsed = parseYouTubeUrl(trimmed);
+    if (parsed) {
+      onUrlSearch?.(parsed.videoId, parsed.source, parsed.isShort);
+    } else {
+      onSearch?.(trimmed);
     }
+    setShowSearchInput(false);
   };
 
   const handleKeyPress = (e) => {
@@ -90,7 +98,7 @@ const Header = ({ onSearch, onSidebarToggle, sidebarOpen }) => {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Search any songs, artists, albums..."
+              placeholder="Search songs, or paste a YouTube link..."
               className="w-full pl-10 pr-4 py-2.5 bg-gray-800/70 border border-gray-700 rounded-full text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
@@ -157,7 +165,7 @@ const Header = ({ onSearch, onSidebarToggle, sidebarOpen }) => {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Search songs, artists, albums..."
+              placeholder="Search or paste a YouTube link..."
               autoFocus
               className="w-full pl-10 pr-4 py-3 bg-gray-800/70 border border-gray-700 rounded-full text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
             />

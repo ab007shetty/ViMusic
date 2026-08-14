@@ -8,12 +8,15 @@ const Sidebar = ({
   onViewPlaylists, 
   onViewMostPlayed, 
   onViewFavorites, 
-  activeTab 
+  activeTab,
+  isGuest
 }) => {
-  const menuItems = [
+  const menuItems = isGuest ? [
     { id: 'mostPlayed', label: "Master's Mix", icon: Home, action: onViewMostPlayed },
     { id: 'playlists', label: 'Playlists', icon: ListMusic, action: onViewPlaylists },
-    { id: 'favorites', label: 'Favorites', icon: Heart, action: onViewFavorites },
+  ] : [
+    { id: 'favorites', label: 'My Favorites', icon: Heart, action: onViewFavorites },
+    { id: 'playlists', label: 'Playlists', icon: ListMusic, action: onViewPlaylists },
   ];
 
   const handleAction = (action) => {
