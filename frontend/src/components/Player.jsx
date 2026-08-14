@@ -41,6 +41,22 @@ const Player = () => {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const userInitiatedPause = useRef(false);
+
+  // Background keepalive: resume if browser or YouTube iframe attempts to auto-pause when screen locks or tab hides
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (isPlaying && ytPlayerRef.current && isPlayerReady.current && !userInitiatedPause.current) {
+          try {
+            ytPlayerRef.current.playVideo();
+          } catch (e) {}
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isPlaying]);
 
   const handleFullscreen = () => {
     if (!videoContainerRef.current) return;
@@ -109,6 +125,7 @@ const Player = () => {
 
   const handleClose = () => {
     try {
+      userInitiatedPause.current = true;
       // Clear update interval
       if (updateIntervalRef.current) {
         clearInterval(updateIntervalRef.current);
@@ -166,25 +183,29 @@ const Player = () => {
         },
         events: {
           onReady: (event) => {
-            console.log('Player ready!');
             isPlayerReady.current = true;
             playerRef.current = event.target;
             event.target.setVolume(volume * 100);
-            
-            // Start progress updates immediately
             startProgressUpdates();
-            
             if (isPlaying) {
               event.target.playVideo();
             }
           },
           onStateChange: (event) => {
-            console.log('Player state changed:', event.data);
-            
             if (event.data === window.YT.PlayerState.PLAYING) {
               setIsPlaying(true);
+              userInitiatedPause.current = false;
               startProgressUpdates();
             } else if (event.data === window.YT.PlayerState.PAUSED) {
+              // If page is hidden and user didn't intentionally pause, auto-resume
+              if (document.visibilityState === 'hidden' && !userInitiatedPause.current) {
+                setTimeout(() => {
+                  try {
+                    event.target.playVideo();
+                  } catch (err) {}
+                }, 100);
+                return;
+              }
               setIsPlaying(false);
               stopProgressUpdates();
             } else if (event.data === window.YT.PlayerState.ENDED) {
@@ -282,8 +303,10 @@ const Player = () => {
     
     try {
       if (isPlaying) {
+        userInitiatedPause.current = true;
         playerRef.current.pauseVideo();
       } else {
+        userInitiatedPause.current = false;
         playerRef.current.playVideo();
       }
     } catch (error) {
