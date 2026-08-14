@@ -27,6 +27,32 @@ export const PlayerProvider = ({ children }) => {
   
   const playerRef = useRef(null);
   const progressInterval = useRef(null);
+  // Silent audio element — keeps Chrome Android audio session alive so
+  // the YouTube iframe keeps playing when the screen locks.
+  const silentAudioRef = useRef(null);
+
+  // Silent audio loop — must exist so Chrome Android grants audio focus to
+  // the page (YouTube iframe alone doesn't satisfy the browser's check).
+  useEffect(() => {
+    // 44-byte minimal silent WAV (base64)
+    const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+    const audio = new Audio(SILENT_WAV);
+    audio.loop = true;
+    audio.volume = 0.001; // near-zero but not 0 (browsers may optimise 0 away)
+    silentAudioRef.current = audio;
+    return () => { audio.pause(); silentAudioRef.current = null; };
+  }, []);
+
+  // Keep silent audio in sync with player state
+  useEffect(() => {
+    const audio = silentAudioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.play().catch(() => {}); // ignore autoplay policy errors
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying]);
 
   // Initialize YouTube Player
   useEffect(() => {
