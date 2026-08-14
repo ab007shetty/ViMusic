@@ -12,8 +12,10 @@ const getUsername = (email) => {
 /**
  * Call backend to switch to user database (LOGIN)
  */
-export const switchToUserDatabase = async (userEmail) => {
+export const switchToUserDatabase = async (userOrEmail) => {
   try {
+    const userEmail = typeof userOrEmail === "object" ? userOrEmail.email : userOrEmail;
+    const bodyPayload = typeof userOrEmail === "object" ? userOrEmail : { email: userEmail };
 
     const response = await fetch(`${API_BASE}/login/${userEmail}`, {
       method: "POST",
@@ -21,6 +23,7 @@ export const switchToUserDatabase = async (userEmail) => {
         "Content-Type": "application/json",
         "X-User-Email": userEmail,
       },
+      body: JSON.stringify(bodyPayload),
     });
 
     if (!response.ok) {

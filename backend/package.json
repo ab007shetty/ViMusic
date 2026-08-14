@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node dev-server.js",
     "deploy": "vercel --prod",
-    "seed:guest": "node scripts/seed-guest-db.js"
+    "seed:guest": "node scripts/seed-guest-db.js",
+    "sync:users": "node scripts/sync-all-users.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

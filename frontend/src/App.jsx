@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { usePlayer } from './contexts/PlayerContext';
 import { fetchFromServer, setUserEmail, getUserEmail } from './utils/api';
@@ -270,7 +270,7 @@ const AppInner = () => {
         const loadingToast = toast.loading('Setting up your account...');
         
         try {
-          const result = await switchToUserDatabase(user.email);
+          const result = await switchToUserDatabase(user);
           toast.dismiss(loadingToast);
           
           if (result.isNew) {
