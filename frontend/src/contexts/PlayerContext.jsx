@@ -165,7 +165,16 @@ export const PlayerProvider = ({ children }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [currentSong]);
 
+  const ensureAudioSession = () => {
+    try {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
   const playSong = (song) => {
+    ensureAudioSession();
     setCurrentSong(song);
     setIsPlaying(true);
     setProgress(0);
@@ -176,6 +185,7 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const playQueue = (songs, startIndex = 0) => {
+    ensureAudioSession();
     setQueue(songs);
     setCurrentIndex(startIndex);
     setCurrentSong(songs[startIndex]);
@@ -186,6 +196,7 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const togglePlay = () => {
+    ensureAudioSession();
     if (!playerRef.current) return;
     
     try {
