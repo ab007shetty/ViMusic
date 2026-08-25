@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { usePlayer } from './contexts/PlayerContext';
+import { PlaybackTimeProvider } from './contexts/PlaybackTimeContext';
 import { fetchFromServer, setUserEmail, getUserEmail } from './utils/api';
 import { fetchVideoMetadata } from './utils/youtubeUtils';
-import { Loader, X, Plus } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { supabase } from './supabase';
 import { switchToUserDatabase } from './utils/databaseUtils';
 import toast, { Toaster } from 'react-hot-toast';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useSmoothScroll } from './hooks/useSmoothScroll';
 
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -14,7 +18,10 @@ import SongCard from './components/SongCard';
 import Player from './components/Player';
 import PlaylistCard from './components/PlaylistCard';
 import SortFilter from './components/SortFilter';
+import SkeletonGrid from './components/SkeletonGrid';
 import { CreatePlaylistModal, EditPlaylistModal, DeletePlaylistModal } from './components/PlaylistModals';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const AppInner = () => {
   const [songs, setSongs] = useState([]);
@@ -22,6 +29,9 @@ const AppInner = () => {
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylistSongs, setSelectedPlaylistSongs] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [nextPageToken, setNextPageToken] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
     const email = getUserEmail();
@@ -34,7 +44,20 @@ const AppInner = () => {
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
 
+  const mainScrollRef = useRef(null);
+  const { scrollToTop } = useSmoothScroll(mainScrollRef);
+
   const [activePlaylistId, setActivePlaylistId] = useState(null);
+
+  // Scroll back to the top on genuine navigation (switching tabs, a fresh
+  // search, picking a different playlist) — otherwise the scroll container
+  // keeps whatever position it was left at from the previous view. This
+  // deliberately excludes "Load more" and silent background refreshes,
+  // which shouldn't disturb where the user currently is.
+  useEffect(() => {
+    scrollToTop();
+  }, [activeTab, isSearching, activePlaylistId, lastSearchQuery, scrollToTop]);
+
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentSort, setCurrentSort] = useState('addedOn');
@@ -61,26 +84,49 @@ const AppInner = () => {
   }, [activeTab]);
 
   // Fetch functions with useCallback
-  const fetchSongs = useCallback(async () => {
-    setLoading(true);
+  // Every fetch function below takes an optional `{ silent: true }` — used
+  // for background syncs (realtime updates, post-mutation refreshes) so
+  // they update data without swapping the whole grid out for the loading
+  // skeleton first. A real tab switch (the default, silent omitted) still
+  // shows the skeleton since there's genuinely nothing to show yet.
+  const fetchSongs = useCallback(async (opts = {}) => {
+    if (!opts.silent) setLoading(true);
     try {
-      // Instead of global most played, fetch Master's Mix (Anirudha's favorites)
-      const data = await fetchFromServer('favorites', {
-        headers: { 'X-User-Email': 'ab007shetty@gmail.com' }
-      });
+      // Logged-in users get their own real Most Played (by totalPlayTimeMs).
+      // Guests keep seeing the curated "Master's Mix" (site owner's
+      // favorites), matching the README's documented guest experience.
+      const email = getUserEmail();
+      const data = email
+        ? await fetchFromServer('songs')
+        : await fetchFromServer('favorites', { headers: { 'X-User-Email': 'ab007shetty@gmail.com' } });
       if (activeTabRef.current === 'mostPlayed') {
         setSongs(data.songs || []);
       }
     } catch (error) {
-      console.error("Error fetching Master's Mix:", error);
-      toast.error("Failed to load Master's Mix");
+      console.error('Error fetching Most Played:', error);
+      toast.error('Failed to load Most Played');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, []);
 
-  const fetchFavorites = useCallback(async () => {
-    setLoading(true);
+  const fetchRecentlyPlayed = useCallback(async (opts = {}) => {
+    if (!opts.silent) setLoading(true);
+    try {
+      const data = await fetchFromServer('songs?orderBy=lastPlayedAt');
+      if (activeTabRef.current === 'recentlyPlayed') {
+        setSongs(data.songs || []);
+      }
+    } catch (error) {
+      console.error('Error fetching Recently Played:', error);
+      toast.error('Failed to load Recently Played');
+    } finally {
+      if (!opts.silent) setLoading(false);
+    }
+  }, []);
+
+  const fetchFavorites = useCallback(async (opts = {}) => {
+    if (!opts.silent) setLoading(true);
     try {
       const data = await fetchFromServer('favorites');
       if (activeTabRef.current === 'favorites') {
@@ -90,12 +136,12 @@ const AppInner = () => {
       console.error('Error fetching favorites:', error);
       toast.error('Failed to load favorites');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, []);
 
-  const fetchSongsForPlaylist = useCallback(async (playlistId) => {
-    setLoading(true);
+  const fetchSongsForPlaylist = useCallback(async (playlistId, opts = {}) => {
+    if (!opts.silent) setLoading(true);
     try {
       const email = getUserEmail();
       const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
@@ -105,12 +151,12 @@ const AppInner = () => {
       console.error('Error fetching playlist songs:', error);
       toast.error('Failed to load playlist songs');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, []);
 
   const fetchPlaylists = useCallback(async (opts = {}) => {
-    setLoading(true);
+    if (!opts.silent) setLoading(true);
     try {
       const email = getUserEmail();
       const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
@@ -122,19 +168,19 @@ const AppInner = () => {
         'Kannada': '/images/kannada.jpg',
         'Beats': '/images/beats.jpeg',
       };
-      
+
       const playlistsWithImages = (data.playlists || []).map((playlist) => ({
         ...playlist,
         thumbnailUrl: imageMap[playlist.name] || '/images/default.jpg',
       }));
-      
+
       setPlaylists(playlistsWithImages);
 
       // Always auto-select the first playlist on initial load
       if (playlistsWithImages.length > 0 && !opts.skipAutoSelect) {
         setActivePlaylistId((current) => {
           const targetId = current || playlistsWithImages[0].id;
-          fetchSongsForPlaylist(targetId);
+          fetchSongsForPlaylist(targetId, opts);
           return targetId;
         });
       }
@@ -142,7 +188,7 @@ const AppInner = () => {
       console.error('Error fetching playlists:', error);
       toast.error('Failed to load playlists');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, [fetchSongsForPlaylist]);
 
@@ -159,7 +205,7 @@ const AppInner = () => {
       });
       
       toast.success(`Playlist "${playlistName}" created!`);
-      await fetchPlaylists(); // Refresh playlists
+      await fetchPlaylists({ silent: true }); // Refresh playlists without a loading flash
       
       return response;
     } catch (error) {
@@ -177,7 +223,7 @@ const AppInner = () => {
       });
       
       toast.success('Playlist updated!');
-      await fetchPlaylists(); // Refresh playlists
+      await fetchPlaylists({ silent: true }); // Refresh playlists without a loading flash
     } catch (error) {
       console.error('Error updating playlist:', error);
       toast.error('Failed to update playlist');
@@ -192,14 +238,14 @@ const AppInner = () => {
       });
       
       toast.success('Playlist deleted!');
-      
+
       // If deleted playlist was active, clear selection
       if (activePlaylistId === playlistId) {
         setActivePlaylistId(null);
         setSelectedPlaylistSongs([]);
       }
-      
-      await fetchPlaylists(); // Refresh playlists
+
+      await fetchPlaylists({ silent: true }); // Refresh playlists without a loading flash
     } catch (error) {
       console.error('Error deleting playlist:', error);
       toast.error('Failed to delete playlist');
@@ -299,31 +345,48 @@ const AppInner = () => {
   }, [refreshCurrentView]);
 
   // ── Supabase Realtime: keep data in sync instantly ─────────────────────
+  // Guests have no favorites/playlists of their own to sync, and the RLS
+  // policy only grants them the shared '' bucket anyway, so skip entirely
+  // when logged out.
   useEffect(() => {
+    if (!currentUser?.email) return;
+
+    const scopedUserId = currentUser.email.toLowerCase().trim();
+    const userFilter = `user_id=eq.${scopedUserId}`;
+
+    // All of these pass { silent: true } — this is a background sync of
+    // data the user is already looking at, not a navigation, so it should
+    // never swap the grid out for the loading skeleton.
     const channel = supabase
-      .channel('db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'song' }, () => {
+      .channel(`db-changes-${scopedUserId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'song', filter: userFilter }, () => {
         // Refresh whichever tab is active
-        if (activeTab === 'favorites') fetchFavorites();
-        else if (activeTab === 'mostPlayed') fetchSongs();
-        else if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId);
+        if (activeTab === 'favorites') fetchFavorites({ silent: true });
+        else if (activeTab === 'mostPlayed') fetchSongs({ silent: true });
+        else if (activeTab === 'recentlyPlayed') fetchRecentlyPlayed({ silent: true });
+        else if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId, { silent: true });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'song_playlist_map' }, () => {
-        if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'song_playlist_map', filter: userFilter }, () => {
+        if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId, { silent: true });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist' }, () => {
-        fetchPlaylists({ skipAutoSelect: true });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist', filter: userFilter }, () => {
+        fetchPlaylists({ skipAutoSelect: true, silent: true });
       })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [activeTab, activePlaylistId, fetchFavorites, fetchSongs, fetchSongsForPlaylist, fetchPlaylists]);
+  }, [currentUser, activeTab, activePlaylistId, fetchFavorites, fetchSongs, fetchRecentlyPlayed, fetchSongsForPlaylist, fetchPlaylists]);
 
   // Search a song directly from a YouTube/YouTube Music URL (strip ID → fetch metadata → show as result)
   const handleUrlSearch = useCallback(async (videoId, source, isShort = false) => {
     setIsSearching(true);
     setLoading(true);
     setIsExpanded(false);
+    // A pasted URL is a single-result "search" — clear any pagination state
+    // left over from a prior keyword search so a stale "Load more" button
+    // can't reappear and fetch more results for the wrong query.
+    setNextPageToken(null);
+    setLastSearchQuery('');
     const loadingToast = toast.loading('Fetching video details...');
     try {
       const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
@@ -345,29 +408,33 @@ const AppInner = () => {
     setIsSearching(true);
     setLoading(true);
     setIsExpanded(false);
-    
+    setLastSearchQuery(query);
+    setNextPageToken(null);
+
     const searchToast = toast.loading('Searching...');
-    
+
     try {
       const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
       const response = await fetch(
         `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&key=${apiKey}`
       );
       const data = await response.json();
-      
+
       toast.dismiss(searchToast);
-      
+
       if (data.items) {
         const formattedResults = data.items.map((item) => ({
           id: item.id.videoId,
           title: item.snippet.title,
           artistsText: item.snippet.channelTitle,
+          channelId: item.snippet.channelId,
           thumbnailUrl: item.snippet.thumbnails.high.url,
           durationText: '',
           source: 'youtube',
           isVideo: true,
         }));
         setSearchResults(formattedResults);
+        setNextPageToken(data.nextPageToken || null);
         toast.success(`Found ${formattedResults.length} results`);
       } else {
         toast.error('No results found');
@@ -380,6 +447,41 @@ const AppInner = () => {
       setLoading(false);
     }
   }, []);
+
+  const handleLoadMoreResults = useCallback(async () => {
+    if (!nextPageToken || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(lastSearchQuery)}&type=video&maxResults=20&pageToken=${nextPageToken}&key=${apiKey}`
+      );
+      const data = await response.json();
+
+      if (data.items) {
+        const formattedResults = data.items.map((item) => ({
+          id: item.id.videoId,
+          title: item.snippet.title,
+          artistsText: item.snippet.channelTitle,
+          channelId: item.snippet.channelId,
+          thumbnailUrl: item.snippet.thumbnails.high.url,
+          durationText: '',
+          source: 'youtube',
+          isVideo: true,
+        }));
+        setSearchResults((prev) => {
+          const seen = new Set(prev.map((s) => s.id));
+          return [...prev, ...formattedResults.filter((s) => !seen.has(s.id))];
+        });
+        setNextPageToken(data.nextPageToken || null);
+      }
+    } catch (error) {
+      console.error('Error loading more results:', error);
+      toast.error('Failed to load more results');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextPageToken, isLoadingMore, lastSearchQuery]);
 
   const handleClearSearch = useCallback(() => {
     setIsSearching(false);
@@ -404,6 +506,16 @@ const AppInner = () => {
     setIsExpanded(false);
   }, [handleClearSearch]);
 
+  const handleViewRecentlyPlayed = useCallback(() => {
+    setActiveTab('recentlyPlayed');
+    handleClearSearch();
+    setCurrentSort('addedOn');
+    setSortOrder('desc');
+    setLocalSearchQuery('');
+    setIsExpanded(false);
+    fetchRecentlyPlayed();
+  }, [handleClearSearch, fetchRecentlyPlayed]);
+
   const handleViewFavorites = useCallback(() => {
     setActiveTab('favorites');
     handleClearSearch();
@@ -419,11 +531,15 @@ const AppInner = () => {
     setLocalSearchQuery('');
   }, [fetchSongsForPlaylist]);
 
-  const toggleFavorite = useCallback(() => {
+  // Only reachable from the Favorites tab as "un-favorite" — every song
+  // visible there is already favorited, so there's nothing to add. Removing
+  // it locally (instead of re-fetching the whole list) means no loading
+  // flash: the card just disappears immediately.
+  const toggleFavorite = useCallback((songId) => {
     if (activeTab === 'favorites') {
-      fetchFavorites();
+      setSongs((prev) => prev.filter((s) => s.id !== songId));
     }
-  }, [activeTab, fetchFavorites]);
+  }, [activeTab]);
 
   const handleSort = useCallback((sortValue) => {
     setCurrentSort(sortValue);
@@ -476,6 +592,75 @@ const AppInner = () => {
 
     return result;
   }, [isSearching, searchResults, activeTab, selectedPlaylistSongs, songs, localSearchQuery, currentSort, sortOrder]);
+
+  const resultsGridRef = useRef(null);
+  const prevDisplayedSongIdsRef = useRef([]);
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const grid = resultsGridRef.current;
+    if (!grid || prefersReducedMotion) return;
+
+    const cards = Array.from(grid.children);
+    if (!cards.length) return;
+
+    // Only animate cards that are actually new. Without this, appending
+    // ("Load more"), removing (un-favoriting, or a silent background sync
+    // re-delivering the same list), or any other re-render of this same
+    // list would re-trigger the fade-in on every already-visible card too
+    // — the whole grid flashing to invisible and back, which looks exactly
+    // like a page reload. Only a genuinely fresh view (new search, tab
+    // switch, sort/filter change) should animate everything.
+    const currentIds = displayedSongs.map((s) => s.id);
+    const prevIds = prevDisplayedSongIdsRef.current;
+
+    const isUnchanged =
+      currentIds.length === prevIds.length &&
+      currentIds.every((id, i) => id === prevIds[i]);
+
+    const isAppend =
+      !isUnchanged &&
+      prevIds.length > 0 &&
+      currentIds.length > prevIds.length &&
+      prevIds.every((id, i) => currentIds[i] === id);
+
+    const isRemoval =
+      !isUnchanged &&
+      prevIds.length > 0 &&
+      currentIds.length < prevIds.length &&
+      currentIds.every((id) => prevIds.includes(id));
+
+    prevDisplayedSongIdsRef.current = currentIds;
+
+    if (isUnchanged || isRemoval) return;
+
+    const cardsToAnimate = isAppend ? cards.slice(prevIds.length) : cards;
+    if (!cardsToAnimate.length) return;
+
+    const tween = gsap.fromTo(
+      cardsToAnimate,
+      { opacity: 0, y: 24 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.5,
+        ease: 'power2.out',
+        stagger: { each: 0.04, from: 'start' },
+        scrollTrigger: {
+          scroller: mainScrollRef.current,
+          trigger: grid,
+          start: 'top bottom',
+        },
+      }
+    );
+
+    // Without this, switching tabs/loading more repeatedly piles up one
+    // ScrollTrigger instance per run, all watching the same grid element.
+    return () => {
+      tween.scrollTrigger?.kill();
+      tween.kill();
+    };
+  }, [displayedSongs]);
 
   const sortOptions = useMemo(() => [
     { label: 'Added On', value: 'addedOn' },
@@ -540,7 +725,7 @@ const AppInner = () => {
         onConfirm={handleDeletePlaylist}
       />
       
-      <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
+      <div className="flex h-dvh bg-gray-900 text-white overflow-hidden">
         <Header
           onSearch={handleSearch}
           onUrlSearch={handleUrlSearch}
@@ -554,12 +739,13 @@ const AppInner = () => {
           onViewPlaylists={handleViewPlaylists}
           onViewMostPlayed={handleViewMostPlayed}
           onViewFavorites={handleViewFavorites}
+          onViewRecentlyPlayed={handleViewRecentlyPlayed}
           activeTab={activeTab}
           isGuest={!currentUser}
         />
 
         <div className={`flex-1 flex flex-col relative overflow-hidden pt-16 transition-all duration-300 ${isSidebarOpen ? 'md:ml-56' : 'ml-0'}`}>
-          <main className="flex-1 overflow-y-auto pb-32">
+          <main ref={mainScrollRef} className="flex-1 overflow-y-auto pb-32">
             <div className="px-4 md:px-6 py-4">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
                 <div className="flex items-center gap-3">
@@ -567,7 +753,9 @@ const AppInner = () => {
                     {isSearching
                       ? 'Search Results'
                       : activeTab === 'mostPlayed'
-                      ? "Master's Mix"
+                      ? (currentUser ? 'Most Played' : "Master's Mix")
+                      : activeTab === 'recentlyPlayed'
+                      ? 'Recently Played'
                       : activeTab === 'playlists'
                       ? `${activePlaylistName} Songs`
                       : 'My Favorites'}
@@ -607,26 +795,34 @@ const AppInner = () => {
                 </div>
               </div>
 
-              {loading && (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <Loader className="animate-spin text-green-400" size={48} />
-                  <p className="mt-4 text-gray-400">Loading...</p>
-                </div>
-              )}
+              {loading && <SkeletonGrid count={10} />}
 
               {!loading && (
                 <>
                   {isSearching || activeTab !== 'playlists' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {displayedSongs.map((song) => (
-                        <SongCard
-                          key={song.id}
-                          song={song}
-                          onToggleFavorite={toggleFavorite}
-                          songs={displayedSongs}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      <div ref={resultsGridRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {displayedSongs.map((song) => (
+                          <SongCard
+                            key={song.id}
+                            song={song}
+                            onToggleFavorite={toggleFavorite}
+                            songs={displayedSongs}
+                          />
+                        ))}
+                      </div>
+                      {isSearching && nextPageToken && (
+                        <div className="flex justify-center mt-6">
+                          <button
+                            onClick={handleLoadMoreResults}
+                            disabled={isLoadingMore}
+                            className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full text-white font-medium transition-colors border border-gray-700"
+                          >
+                            {isLoadingMore ? 'Loading…' : 'Load more results'}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <>
                       <div className="overflow-x-hidden md:overflow-visible flex flex-nowrap gap-1 mb-8 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-5">
@@ -680,9 +876,11 @@ const AppInner = () => {
 };
 
 const App = () => (
-  <PlayerProvider>
-    <AppInner />
-  </PlayerProvider>
+  <PlaybackTimeProvider>
+    <PlayerProvider>
+      <AppInner />
+    </PlayerProvider>
+  </PlaybackTimeProvider>
 );
 
 export default App;

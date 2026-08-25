@@ -1,13 +1,14 @@
 // components/Sidebar.jsx
 import React from 'react';
-import { Home, ListMusic, Heart } from 'lucide-react';
+import { Home, ListMusic, Heart, History } from 'lucide-react';
 
-const Sidebar = ({ 
-  isOpen, 
-  onClose, 
-  onViewPlaylists, 
-  onViewMostPlayed, 
-  onViewFavorites, 
+const Sidebar = ({
+  isOpen,
+  onClose,
+  onViewPlaylists,
+  onViewMostPlayed,
+  onViewFavorites,
+  onViewRecentlyPlayed,
   activeTab,
   isGuest
 }) => {
@@ -16,6 +17,8 @@ const Sidebar = ({
     { id: 'playlists', label: 'Playlists', icon: ListMusic, action: onViewPlaylists },
   ] : [
     { id: 'favorites', label: 'My Favorites', icon: Heart, action: onViewFavorites },
+    { id: 'mostPlayed', label: 'Most Played', icon: Home, action: onViewMostPlayed },
+    { id: 'recentlyPlayed', label: 'Recently Played', icon: History, action: onViewRecentlyPlayed },
     { id: 'playlists', label: 'Playlists', icon: ListMusic, action: onViewPlaylists },
   ];
 
@@ -32,15 +35,19 @@ const Sidebar = ({
       {/* Mobile Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 z-[45] md:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar - Now closes on both mobile AND desktop */}
+      {/* Sidebar - Now closes on both mobile AND desktop. z-50 (not z-40)
+          so it renders above the expanded player overlay (also z-40) —
+          otherwise, since Player mounts after Sidebar in the DOM, the
+          maximized player would paint on top and hide the sidebar even
+          while it's open. */}
       <aside
         className={`
-          fixed top-16 left-0 bottom-0 z-40 w-56
+          fixed top-16 left-0 bottom-0 z-50 w-56
           bg-gradient-to-b from-gray-900 via-gray-950 to-black
           border-r border-gray-800 flex flex-col
           transition-transform duration-300 ease-in-out

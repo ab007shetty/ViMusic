@@ -13,15 +13,28 @@ export default async function handler(req, res) {
   }
 
   const userId = getUserId(req);
+  const orderColumn = req.query.orderBy === "lastPlayedAt" ? "lastPlayedAt" : "totalPlayTimeMs";
 
   try {
     let query = supabase
       .from("song")
       .select("*")
-      .order("totalPlayTimeMs", { ascending: false })
+      .order(orderColumn, { ascending: false })
       .limit(100);
 
     query = query.eq("user_id", userId);
+
+    // "totalPlayTimeMs" defaults to 0 and is never null, so filtering on
+    // "is not null" doesn't actually exclude untouched songs — it would
+    // return every favorited/tracked song tied at zero. Require it to be
+    // positive instead, so Most Played only shows songs you've actually
+    // spent time listening to. "lastPlayedAt" genuinely defaults to null,
+    // so the null-filter is correct as-is for Recently Played.
+    if (orderColumn === "lastPlayedAt") {
+      query = query.not("lastPlayedAt", "is", null);
+    } else {
+      query = query.gt("totalPlayTimeMs", 0);
+    }
 
     const { data, error } = await query;
     if (error) throw error;

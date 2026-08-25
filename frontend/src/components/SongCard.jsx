@@ -99,6 +99,7 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
       songId: song.id,
       title: song.title,
       artistsText: song.artistsText,
+      channelId: song.channelId,
       durationText: song.durationText,
       thumbnailUrl: song.thumbnailUrl,
       totalPlayTimeMs: 0,
@@ -127,6 +128,7 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
       songId: song.id,
       title: song.title,
       artistsText: song.artistsText,
+      channelId: song.channelId,
       durationText: song.durationText,
       thumbnailUrl: song.thumbnailUrl,
       totalPlayTimeMs: 0,
@@ -220,6 +222,8 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
         <img
           src={enhancedThumbnailUrl}
           alt={song.title}
+          loading="lazy"
+          decoding="async"
           className="w-full h-32 sm:h-48 md:h-56 object-cover rounded transition-all duration-300 group-hover:brightness-75"
         />
         

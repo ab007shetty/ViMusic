@@ -99,6 +99,7 @@ export async function fetchVideoMetadata(videoId, apiKey, source = 'youtube', is
     id: videoId,
     title: snippet.title,
     artistsText: snippet.channelTitle,
+    channelId: snippet.channelId,
     thumbnailUrl:
       snippet.thumbnails?.maxres?.url ||
       snippet.thumbnails?.high?.url ||

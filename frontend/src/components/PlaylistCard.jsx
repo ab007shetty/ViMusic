@@ -30,10 +30,12 @@ const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete, isReadOnl
       `}
     >
       <div className="relative overflow-hidden rounded-lg md:rounded-xl">
-        <img 
-          src={playlist.thumbnailUrl} 
-          alt={playlist.name} 
-          className="w-full aspect-square md:h-32 md:aspect-auto object-cover transition-transform duration-300 md:hover:scale-110" 
+        <img
+          src={playlist.thumbnailUrl}
+          alt={playlist.name}
+          loading="lazy"
+          decoding="async"
+          className="w-full aspect-square md:h-32 md:aspect-auto object-cover transition-transform duration-300 md:hover:scale-110"
         />
       </div>
       

@@ -52,8 +52,8 @@ export const fetchFromServer = async (endpoint, options = {}) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP error! status: ${response.status}${errorText ? ` — ${errorText}` : ''}`);
     }
 
     return await response.json();

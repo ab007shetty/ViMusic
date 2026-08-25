@@ -1,18 +1,20 @@
 // components/Player.jsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { usePlayer } from '../contexts/PlayerContext';
-import { 
-  Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, 
-  Shuffle, Repeat, Repeat1, X, Film, Music, ChevronDown, Maximize2, Subtitles
+import { usePlaybackTime } from '../contexts/PlaybackTimeContext';
+import { fetchFromServer, isLoggedIn, getUserEmail } from '../utils/api';
+import {
+  Play, Pause, SkipForward, SkipBack, Volume2, VolumeX,
+  Shuffle, Repeat, Repeat1, X, Film, Music, ChevronDown, Maximize2, Subtitles, ListMusic
 } from 'lucide-react';
+import QueuePanel from './QueuePanel';
 
 const Player = () => {
   const {
     currentSong,
     isPlaying,
     volume,
-    progress,
-    duration,
     shuffle,
     repeat,
     isVideoMode,
@@ -26,14 +28,15 @@ const Player = () => {
     toggleRepeat,
     toggleVideoMode,
     closePlayer,
-    setProgress,
-    setDuration,
     isExpanded,
     setIsExpanded,
   } = usePlayer();
+  const { progress, duration, setProgress, setDuration } = usePlaybackTime();
 
+  const [scrubProgress, setScrubProgress] = useState(null); // null = not dragging
   const [isMuted, setIsMuted] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const ytPlayerRef = useRef(null);
   const isPlayerReady = useRef(false);
   const updateIntervalRef = useRef(null);
@@ -42,6 +45,53 @@ const Player = () => {
   const touchEndY = useRef(0);
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
   const userInitiatedPause = useRef(false);
+  // Long-lived refs so the (now created-once) YT player event handlers below
+  // always see the latest repeat mode / playNext without going stale.
+  const repeatRef = useRef(repeat);
+  const playNextRef = useRef(playNext);
+  useEffect(() => { repeatRef.current = repeat; }, [repeat]);
+  useEffect(() => { playNextRef.current = playNext; });
+
+  const pendingPlayMsRef = useRef(0);
+  const FLUSH_THRESHOLD_MS = 20000;
+
+  const flushPlayTime = useCallback((useBeacon = false) => {
+    const ms = pendingPlayMsRef.current;
+    if (ms <= 0 || !currentSong || !isLoggedIn()) {
+      pendingPlayMsRef.current = 0;
+      return;
+    }
+    pendingPlayMsRef.current = 0;
+
+    const payload = {
+      // Included in the body (not just relied on via the URL's :songId
+      // route param) to match how favorite/playlist calls already work —
+      // the local dev server's req.query injection for path params isn't
+      // reliable, so every route should be able to fall back to the body.
+      songId: currentSong.id,
+      title: currentSong.title,
+      artistsText: currentSong.artistsText,
+      channelId: currentSong.channelId,
+      durationText: currentSong.durationText,
+      thumbnailUrl: currentSong.thumbnailUrl,
+      incrementMs: ms,
+    };
+
+    if (useBeacon && navigator.sendBeacon) {
+      // sendBeacon() cannot set custom request headers, so X-User-Email
+      // (normally attached by fetchFromServer) won't reach the backend —
+      // include it in the body instead; play.js falls back to it.
+      const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
+      const blob = new Blob([JSON.stringify({ ...payload, userEmail: getUserEmail() })], { type: 'application/json' });
+      navigator.sendBeacon(`${apiBase}/songs/${currentSong.id}/play`, blob);
+      return;
+    }
+
+    fetchFromServer(`songs/${currentSong.id}/play`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch((err) => console.error('Error flushing play time:', err));
+  }, [currentSong]);
 
   // Background keepalive: resume if browser or YouTube iframe attempts to auto-pause when screen locks or tab hides
   useEffect(() => {
@@ -57,6 +107,18 @@ const Player = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isPlaying]);
+
+  useEffect(() => {
+    return () => {
+      flushPlayTime();
+    };
+  }, [currentSong, flushPlayTime]);
+
+  useEffect(() => {
+    const onPageHide = () => flushPlayTime(true);
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [flushPlayTime]);
 
   const handleFullscreen = () => {
     if (!videoContainerRef.current) return;
@@ -145,100 +207,100 @@ const Player = () => {
     }
   };
 
-  // Initialize YouTube Player
+  // Create the YouTube player once. Recreating the iframe/player on every
+  // track change made each track change look like a brand-new autoplaying
+  // video to the browser, which can get silently autoplay-blocked while the
+  // tab is backgrounded/unfocused (e.g. switched to another tab or app) —
+  // that's why "next" would silently fail to start. Subsequent tracks are
+  // loaded into this same long-lived player instance instead (see the next
+  // effect below), which keeps playing reliably regardless of focus.
   useEffect(() => {
-    if (currentSong && window.YT) {
-      // Cleanup previous player
-      if (ytPlayerRef.current) {
-        try {
-          ytPlayerRef.current.destroy();
-        } catch (e) {
-          console.log('Error destroying previous player:', e);
-        }
-      }
-      
-      // Clear any existing interval
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-        updateIntervalRef.current = null;
-      }
-      
-      isPlayerReady.current = false;
+    if (!currentSong || !window.YT || ytPlayerRef.current) return;
 
-      // Create new player
-      ytPlayerRef.current = new window.YT.Player('yt-player', {
-        height: '100%',
-        width: '100%',
-        videoId: currentSong.id,
-        playerVars: {
-          autoplay: 1,
-          controls: 0,
-          enablejsapi: 1,
-          origin: window.location.origin,
-          rel: 0,
-          modestbranding: 1,
-          cc_load_policy: 0,
-          iv_load_policy: 3,
-          fs: 0,
-        },
-        events: {
-          onReady: (event) => {
-            isPlayerReady.current = true;
-            playerRef.current = event.target;
-            event.target.setVolume(volume * 100);
-            startProgressUpdates();
-            if (isPlaying) {
-              event.target.playVideo();
-            }
-          },
-          onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.PLAYING) {
-              setIsPlaying(true);
-              userInitiatedPause.current = false;
-              startProgressUpdates();
-            } else if (event.data === window.YT.PlayerState.PAUSED) {
-              // If page is hidden and user didn't intentionally pause, auto-resume
-              if (document.visibilityState === 'hidden' && !userInitiatedPause.current) {
-                setTimeout(() => {
-                  try {
-                    event.target.playVideo();
-                  } catch (err) {}
-                }, 100);
-                return;
-              }
-              setIsPlaying(false);
-              stopProgressUpdates();
-            } else if (event.data === window.YT.PlayerState.ENDED) {
-              if (repeat === 'one') {
-                event.target.playVideo();
-              } else {
-                playNext();
-              }
-            }
-          },
-          onError: (event) => {
-            console.error('YouTube player error:', event.data);
+    isPlayerReady.current = false;
+
+    ytPlayerRef.current = new window.YT.Player('yt-player', {
+      height: '100%',
+      width: '100%',
+      videoId: currentSong.id,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        enablejsapi: 1,
+        origin: window.location.origin,
+        rel: 0,
+        modestbranding: 1,
+        cc_load_policy: 0,
+        iv_load_policy: 3,
+        fs: 0,
+      },
+      events: {
+        onReady: (event) => {
+          isPlayerReady.current = true;
+          playerRef.current = event.target;
+          event.target.setVolume(volume * 100);
+          startProgressUpdates();
+          if (isPlaying) {
+            event.target.playVideo();
           }
         },
-      });
-    }
-
-    return () => {
-      // Cleanup on unmount or song change
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-        updateIntervalRef.current = null;
-      }
-      
-      if (ytPlayerRef.current && isPlayerReady.current) {
-        try {
-          ytPlayerRef.current.stopVideo();
-        } catch (e) {
-          console.log('Error stopping video:', e);
+        onStateChange: (event) => {
+          if (event.data === window.YT.PlayerState.PLAYING) {
+            setIsPlaying(true);
+            userInitiatedPause.current = false;
+            startProgressUpdates();
+          } else if (event.data === window.YT.PlayerState.PAUSED) {
+            // If page is hidden and user didn't intentionally pause, auto-resume
+            if (document.visibilityState === 'hidden' && !userInitiatedPause.current) {
+              setTimeout(() => {
+                try {
+                  event.target.playVideo();
+                } catch (err) {}
+              }, 100);
+              return;
+            }
+            setIsPlaying(false);
+            stopProgressUpdates();
+          } else if (event.data === window.YT.PlayerState.ENDED) {
+            if (repeatRef.current === 'one') {
+              event.target.playVideo();
+            } else {
+              playNextRef.current();
+            }
+          }
+        },
+        onError: (event) => {
+          // Without this, a song whose YouTube video was deleted/made
+          // private just sits there silently — no progress, no feedback,
+          // nothing — which looks exactly like the app is stuck.
+          console.error('YouTube player error:', event.data);
+          const messages = {
+            2: 'Invalid video — skipping.',
+            5: 'This video can\'t be played — skipping.',
+            100: 'This song is no longer available — skipping.',
+            101: 'This song can\'t be played here — skipping.',
+            150: 'This song can\'t be played here — skipping.',
+          };
+          toast.error(messages[event.data] || 'This song could not be played — skipping.');
+          setIsPlaying(false);
+          stopProgressUpdates();
+          setTimeout(() => playNextRef.current(), 1200);
         }
-      }
-    };
+      },
+    });
   }, [currentSong]);
+
+  // Load every subsequent track into the existing player instance (instead
+  // of tearing it down and creating a new one — see effect above).
+  useEffect(() => {
+    if (!currentSong || !ytPlayerRef.current || !isPlayerReady.current) return;
+
+    try {
+      ytPlayerRef.current.loadVideoById(currentSong.id);
+    } catch (error) {
+      console.error('Error loading video:', error);
+    }
+  }, [currentSong?.id]);
 
   // Start progress updates
   const startProgressUpdates = () => {
@@ -275,6 +337,28 @@ const Player = () => {
           const progressPercentage = (currentTime / totalDuration) * 100;
           setProgress(progressPercentage);
           setDuration(totalDuration);
+        }
+
+        if (isPlaying) {
+          pendingPlayMsRef.current += 500;
+          if (pendingPlayMsRef.current >= FLUSH_THRESHOLD_MS) {
+            flushPlayTime();
+          }
+        }
+
+        // Background watchdog: the browser or YouTube's own embed script
+        // can silently pause playback the instant the tab/app is
+        // backgrounded or the screen locks. A single reactive resume
+        // attempt (the visibilitychange/onStateChange handlers below) can
+        // lose that fight, so keep re-asserting play state on every tick
+        // for as long as we're supposed to be playing but hidden.
+        if (isPlaying && document.visibilityState === 'hidden' && !userInitiatedPause.current) {
+          const state = typeof playerRef.current.getPlayerState === 'function'
+            ? playerRef.current.getPlayerState()
+            : null;
+          if (state !== window.YT?.PlayerState?.PLAYING && state !== window.YT?.PlayerState?.BUFFERING) {
+            try { playerRef.current.playVideo(); } catch (e) {}
+          }
         }
       }
     } catch (error) {
@@ -536,7 +620,14 @@ const Player = () => {
                   </button>
                 </div>
               )}
-              <button 
+              <button
+                onClick={() => setIsQueueOpen((v) => !v)}
+                className={`p-1.5 rounded-full transition-colors ${isQueueOpen ? 'bg-green-600 text-white' : 'bg-gray-800/70 text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                title="Up Next"
+              >
+                <ListMusic size={18} />
+              </button>
+              <button
                 onClick={() => setIsExpanded(false)}
                 className="p-1.5 bg-gray-800/70 hover:bg-gray-700 rounded-full text-gray-300 hover:text-white transition-colors"
                 title="Minimize"
@@ -558,14 +649,16 @@ const Player = () => {
             <div className="relative h-1.5 bg-gray-700/50 rounded-full overflow-hidden group">
               <div
                 className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all duration-300"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${scrubProgress ?? progress}%` }}
               />
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={progress}
-                onChange={(e) => seekTo(Number(e.target.value))}
+                value={scrubProgress ?? progress}
+                onChange={(e) => setScrubProgress(Number(e.target.value))}
+                onMouseUp={(e) => { seekTo(Number(e.target.value)); setScrubProgress(null); }}
+                onTouchEnd={(e) => { seekTo(Number(e.target.value)); setScrubProgress(null); }}
                 className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
@@ -587,14 +680,30 @@ const Player = () => {
           setIsExpanded(true);
         }}
       >
-        {!isMobile && (
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
-            <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
+        {/* Seekable progress line — thin visually, but the invisible range
+            input has a much taller hit area so it's actually tappable on
+            mobile. Every pointer event stops propagation so it never
+            bubbles into the outer bar's "expand player" onClick. */}
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800 z-10">
+          <div
+            className="h-full bg-green-500 transition-all duration-300 pointer-events-none"
+            style={{ width: `${scrubProgress ?? progress}%` }}
+          />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={scrubProgress ?? progress}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); setScrubProgress(Number(e.target.value)); }}
+            onMouseUp={(e) => { e.stopPropagation(); seekTo(Number(e.target.value)); setScrubProgress(null); }}
+            onTouchEnd={(e) => { e.stopPropagation(); seekTo(Number(e.target.value)); setScrubProgress(null); }}
+            className="absolute left-0 right-0 w-full opacity-0 cursor-pointer"
+            style={{ top: '-8px', height: '20px' }}
+          />
+        </div>
 
         <div className="container mx-auto px-4 h-full flex items-center justify-between gap-4">
           {/* 1. Minimized Song Info (Left block) */}
@@ -620,23 +729,19 @@ const Player = () => {
           </div>
 
           {/* 2. Playback Controls (Center block) */}
-          <div className="flex items-center justify-center space-x-2 md:space-x-4 flex-1">
-            {!isMobile && (
-              <button
-                onClick={toggleShuffle}
-                className={`p-1.5 transition-colors ${shuffle ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
-                title="Shuffle"
-              >
-                <Shuffle size={16} />
-              </button>
-            )}
-            
-            {!isMobile && (
-              <button onClick={playPrevious} className="p-2 text-gray-400 hover:text-white transition-colors">
-                <SkipBack size={20} />
-              </button>
-            )}
-            
+          <div className="flex items-center justify-center space-x-1 sm:space-x-2 md:space-x-4 flex-1">
+            <button
+              onClick={toggleShuffle}
+              className={`p-1 sm:p-1.5 transition-colors ${shuffle ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
+              title="Shuffle"
+            >
+              <Shuffle size={isMobile ? 14 : 16} />
+            </button>
+
+            <button onClick={playPrevious} className="p-1 sm:p-2 text-gray-400 hover:text-white transition-colors" title="Previous">
+              <SkipBack size={isMobile ? 18 : 20} />
+            </button>
+
             <button
               onClick={handleTogglePlay}
               className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors flex-shrink-0"
@@ -644,21 +749,17 @@ const Player = () => {
               {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
             </button>
 
-            {!isMobile && (
-              <button onClick={playNext} className="p-2 text-gray-400 hover:text-white transition-colors">
-                <SkipForward size={20} />
-              </button>
-            )}
+            <button onClick={playNext} className="p-1 sm:p-2 text-gray-400 hover:text-white transition-colors" title="Next">
+              <SkipForward size={isMobile ? 18 : 20} />
+            </button>
 
-            {!isMobile && (
-              <button
-                onClick={toggleRepeat}
-                className={`p-1.5 transition-colors ${repeat !== 'off' ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
-                title={`Repeat: ${repeat}`}
-              >
-                {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
-              </button>
-            )}
+            <button
+              onClick={toggleRepeat}
+              className={`p-1 sm:p-1.5 transition-colors ${repeat !== 'off' ? 'text-green-400' : 'text-gray-400 hover:text-white'}`}
+              title={`Repeat: ${repeat}`}
+            >
+              {repeat === 'one' ? <Repeat1 size={isMobile ? 14 : 16} /> : <Repeat size={isMobile ? 14 : 16} />}
+            </button>
           </div>
 
           {/* 3. Duration, Toggle & Close/End (Right block) */}
@@ -717,6 +818,8 @@ const Player = () => {
           </div>
         </div>
       </div>
+
+      <QueuePanel isOpen={isQueueOpen} onClose={() => setIsQueueOpen(false)} />
     </>
   );
 };

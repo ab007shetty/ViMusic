@@ -17,6 +17,10 @@ dist-ssr
 file_structure*
 serviceAccountKey.json
 
+# Local agent working files (build ledgers, scratch state)
+.superpowers/
+docs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
