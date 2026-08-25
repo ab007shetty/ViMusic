@@ -36,6 +36,7 @@ export const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
           <h2 className="text-xl font-bold text-white">Create New Playlist</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="text-gray-400 hover:text-white transition-colors"
           >
             <X size={24} />
@@ -44,11 +45,13 @@ export const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
 
         <form onSubmit={handleSubmit} className="p-6">
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="create-playlist-name" className="block text-sm font-medium text-gray-300 mb-2">
               Playlist Name
             </label>
             <input
               type="text"
+              id="create-playlist-name"
+              name="playlistName"
               value={playlistName}
               onChange={(e) => setPlaylistName(e.target.value)}
               placeholder="Enter playlist name..."
@@ -114,6 +117,7 @@ export const EditPlaylistModal = ({ isOpen, onClose, playlist, onUpdate }) => {
           <h2 className="text-xl font-bold text-white">Edit Playlist</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="text-gray-400 hover:text-white transition-colors"
           >
             <X size={24} />
@@ -122,11 +126,13 @@ export const EditPlaylistModal = ({ isOpen, onClose, playlist, onUpdate }) => {
 
         <form onSubmit={handleSubmit} className="p-6">
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="edit-playlist-name" className="block text-sm font-medium text-gray-300 mb-2">
               Playlist Name
             </label>
             <input
               type="text"
+              id="edit-playlist-name"
+              name="playlistName"
               value={playlistName}
               onChange={(e) => setPlaylistName(e.target.value)}
               placeholder="Enter playlist name..."
@@ -184,6 +190,7 @@ export const DeletePlaylistModal = ({ isOpen, onClose, playlist, onConfirm }) =>
           <h2 className="text-xl font-bold text-red-400">Delete Playlist</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="text-gray-400 hover:text-white transition-colors"
           >
             <X size={24} />

@@ -3,9 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/images/default.jpg" type="image/x-icon">
+
+    <!-- Connections established early so the actual requests (made once a
+         song loads/plays) don't pay the DNS+TLS+TCP setup cost on top of
+         the request itself. -->
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <link rel="preconnect" href="https://i.ytimg.com" />
+    <link rel="preconnect" href="https://www.googleapis.com" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="ViMusic - Your Personal Music Streaming Platform" />
-    <title>Vi Music</title>
+    <title>ViMusic – Free Online Music &amp; Video Player</title>
+    <meta name="description" content="ViMusic is a free web music player: search and stream any song or video, build playlists, favorite tracks, and pick up your listening history across devices. No installs, sign in with Google." />
+    <meta name="keywords" content="music player, online music player, free music streaming, web music player, playlist maker, video player, stream music online" />
+    <meta name="robots" content="index, follow" />
+    <!-- TODO: once this is deployed to its real domain, add:
+         <link rel="canonical" href="https://YOUR-ACTUAL-DOMAIN/" />
+         and set og:url below to the same address. Left out rather than
+         guessed — a wrong canonical URL actively hurts SEO instead of
+         helping it. -->
+
+    <!-- Open Graph / social link previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ViMusic – Free Online Music & Video Player" />
+    <meta property="og:description" content="Search, stream, and organize music and videos for free — playlists, favorites, and listening history, right in your browser." />
+    <meta property="og:image" content="/images/default.jpg" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ViMusic – Free Online Music & Video Player" />
+    <meta name="twitter:description" content="Search, stream, and organize music and videos for free — playlists, favorites, and listening history, right in your browser." />
+    <meta name="twitter:image" content="/images/default.jpg" />
+
+    <!-- Structured data: helps search engines understand this is a music
+         player web app, which is what "music player" searchers are after. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "ViMusic",
+        "applicationCategory": "MusicApplication",
+        "operatingSystem": "Any (Web Browser)",
+        "description": "A free web-based music and video player with search, playlists, favorites, and cross-device listening history.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
   </head>
   <body class="bg-gray-900 text-white">
     <div id="root"></div>

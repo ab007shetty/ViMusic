@@ -428,7 +428,10 @@ const AppInner = () => {
           title: item.snippet.title,
           artistsText: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
-          thumbnailUrl: item.snippet.thumbnails.high.url,
+          // "medium" (320x180) instead of "high" (480x360) — grid cards
+          // never render larger than ~224px tall, so the extra resolution
+          // was pure wasted transfer weight across dozens of results.
+          thumbnailUrl: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.high.url,
           durationText: '',
           source: 'youtube',
           isVideo: true,
@@ -464,7 +467,10 @@ const AppInner = () => {
           title: item.snippet.title,
           artistsText: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
-          thumbnailUrl: item.snippet.thumbnails.high.url,
+          // "medium" (320x180) instead of "high" (480x360) — grid cards
+          // never render larger than ~224px tall, so the extra resolution
+          // was pure wasted transfer weight across dozens of results.
+          thumbnailUrl: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.high.url,
           durationText: '',
           source: 'youtube',
           isVideo: true,
@@ -802,12 +808,13 @@ const AppInner = () => {
                   {isSearching || activeTab !== 'playlists' ? (
                     <>
                       <div ref={resultsGridRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {displayedSongs.map((song) => (
+                        {displayedSongs.map((song, index) => (
                           <SongCard
                             key={song.id}
                             song={song}
                             onToggleFavorite={toggleFavorite}
                             songs={displayedSongs}
+                            priority={index < 6}
                           />
                         ))}
                       </div>
@@ -842,12 +849,13 @@ const AppInner = () => {
                       {selectedPlaylistSongs.length > 0 && (
                         <div className="mt-8">
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                            {displayedSongs.map((song) => (
+                            {displayedSongs.map((song, index) => (
                               <SongCard
                                 key={song.id}
                                 song={song}
                                 onToggleFavorite={toggleFavorite}
                                 songs={displayedSongs}
+                                priority={index < 6}
                               />
                             ))}
                           </div>

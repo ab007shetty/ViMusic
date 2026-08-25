@@ -95,6 +95,8 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="search"
+              id="search-desktop"
+              name="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
@@ -110,6 +112,7 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
           {/* Mobile Search Icon */}
           <button
             onClick={() => setShowSearchInput(!showSearchInput)}
+            aria-label={showSearchInput ? "Close search" : "Open search"}
             className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
           >
             <Search className="w-6 h-6" />
@@ -119,6 +122,7 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
           {!user ? (
             <button
               onClick={handleGoogleSignIn}
+              aria-label="Sign in with Google"
               className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-full font-medium hover:bg-gray-200 transition shadow-lg text-sm"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -133,6 +137,7 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
             <div className="relative">
               <button
                 onClick={() => setShowAccountMenu(!showAccountMenu)}
+                aria-label="Account menu"
                 className="flex items-center justify-center w-10 h-10 hover:bg-gray-800 rounded-full transition-all"
               >
                 <img
@@ -162,6 +167,8 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="search"
+              id="search-mobile"
+              name="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}

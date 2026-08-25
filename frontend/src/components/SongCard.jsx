@@ -5,7 +5,7 @@ import { fetchFromServer, isLoggedIn } from '../utils/api';
 import { usePlayer } from '../contexts/PlayerContext';
 import toast from 'react-hot-toast';
 
-const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
+const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
   const { playSong, playQueue, addToQueue } = usePlayer();
   const [showPlaylists, setShowPlaylists] = useState(false);
   const [playlists, setPlaylists] = useState([]);
@@ -15,9 +15,20 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
   const playlistRef = useRef(null);
   const cardRef = useRef(null);
   const plusBtnRef = useRef(null);
+  const imgRef = useRef(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
-  
+
   const enhancedThumbnailUrl = song.thumbnailUrl?.replace(/w60-h60/, 'w544-h544') || '/images/default.jpg';
+
+  // Set as a raw DOM property instead of a JSX prop — this React version's
+  // prop whitelist doesn't recognize fetchPriority yet, so passing it as
+  // fetchPriority={...} makes React warn and forward it to the DOM
+  // mis-cased. Setting it directly on the element sidesteps that entirely.
+  useEffect(() => {
+    if (imgRef.current) {
+      imgRef.current.fetchPriority = priority ? 'high' : 'auto';
+    }
+  }, [priority]);
 
   useEffect(() => {
     setIsFavorite(song.likedAt !== null && song.likedAt !== undefined);
@@ -220,9 +231,10 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
     >
       <div className="relative">
         <img
+          ref={imgRef}
           src={enhancedThumbnailUrl}
           alt={song.title}
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
           decoding="async"
           className="w-full h-32 sm:h-48 md:h-56 object-cover rounded transition-all duration-300 group-hover:brightness-75"
         />
@@ -234,6 +246,7 @@ const SongCard = ({ song, onToggleFavorite, songs = [] }) => {
         <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <button
             onClick={handlePlaySong}
+            aria-label={`Play ${song.title}`}
             className="bg-green-500 rounded-full p-4 shadow-2xl hover:scale-110 transition-transform"
           >
             <Play size={32} fill="white" className="text-white" />
