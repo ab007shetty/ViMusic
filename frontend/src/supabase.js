@@ -15,6 +15,12 @@ export const signInWithGoogle = async () => {
     provider: "google",
     options: {
       redirectTo: window.location.origin,
+      // Without this, Google skips the account picker entirely whenever
+      // the browser already has an active Google session, silently
+      // signing in with whichever account that session belongs to.
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   });
 

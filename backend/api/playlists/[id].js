@@ -86,6 +86,7 @@ export default async function handler(req, res) {
     const {
       title,
       artistsText,
+      channelId,
       durationText,
       thumbnailUrl,
       totalPlayTimeMs = 0,
@@ -112,6 +113,7 @@ export default async function handler(req, res) {
           user_id: userId,
           title: title || "",
           artistsText,
+          channelId,
           durationText,
           thumbnailUrl,
           totalPlayTimeMs: totalPlayTimeMs ?? 0,

@@ -55,6 +55,11 @@ export async function importSqliteDb(buffer, userId, supabase) {
         thumbnailUrl: r.thumbnailUrl,
         likedAt: r.likedAt,
         totalPlayTimeMs: r.totalPlayTimeMs ?? 0,
+        // Both are absent on .db files exported before these columns
+        // existed (or from the original Android app) — r.channelId /
+        // r.lastPlayedAt are simply undefined there, which ?? null handles.
+        channelId: r.channelId ?? null,
+        lastPlayedAt: r.lastPlayedAt ?? null,
       }));
       const { error } = await supabase
         .from("song")
@@ -290,6 +295,8 @@ export async function exportSqliteDb(userId, supabase) {
       thumbnailUrl TEXT,
       likedAt INTEGER,
       totalPlayTimeMs INTEGER NOT NULL DEFAULT 0,
+      channelId TEXT,
+      lastPlayedAt INTEGER,
       PRIMARY KEY(id)
     );
 
@@ -400,9 +407,9 @@ export async function exportSqliteDb(userId, supabase) {
   const songs = await fetchAll(supabase, "song", userId);
   for (const s of songs) {
     db.run(
-      `INSERT OR IGNORE INTO Song (id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [s.id, s.title, s.artistsText, s.durationText, s.thumbnailUrl, s.likedAt, s.totalPlayTimeMs ?? 0]
+      `INSERT OR IGNORE INTO Song (id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs, channelId, lastPlayedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [s.id, s.title, s.artistsText, s.durationText, s.thumbnailUrl, s.likedAt, s.totalPlayTimeMs ?? 0, s.channelId ?? null, s.lastPlayedAt ?? null]
     );
   }
 
@@ -419,11 +426,16 @@ export async function exportSqliteDb(userId, supabase) {
     );
   }
 
-  // SongPlaylistMap
+  // SongPlaylistMap — skip any mapping whose song isn't actually in the
+  // exported Song table (there's no DB-level foreign key enforcing that on
+  // the Postgres side, so this guards against ever writing a playlist
+  // entry that points at nothing).
+  const exportedSongIds = new Set(songs.map((s) => s.id));
   const spm = await fetchAll(supabase, "song_playlist_map", userId);
   for (const m of spm) {
     const localPlaylistId = playlistIdMap[m.playlist_id];
     if (!localPlaylistId) continue;
+    if (!exportedSongIds.has(m.song_id)) continue;
     db.run(
       `INSERT OR IGNORE INTO SongPlaylistMap (songId, playlistId, position) VALUES (?, ?, ?)`,
       [m.song_id, localPlaylistId, m.position]
@@ -523,16 +535,34 @@ function queryAll(db, sql, params = []) {
 /**
  * Fetch all rows from a Supabase table for a given user.
  * '' = guest, anything else = authenticated user.
+ *
+ * Paginated with .range() rather than one unbounded .select("*") — Supabase
+ * projects commonly cap PostgREST's default page size (often 1000 rows),
+ * which would otherwise silently truncate the export for any user whose
+ * library/playlists grew past that cutoff instead of erroring.
  */
 async function fetchAll(supabase, table, userId) {
-  const { data, error } = await supabase
-    .from(table)
-    .select("*")
-    .eq("user_id", userId);
+  const PAGE_SIZE = 1000;
+  const allRows = [];
+  let from = 0;
 
-  if (error) {
-    console.error(`Error fetching ${table}:`, error.message);
-    return [];
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("user_id", userId)
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error(`Error fetching ${table}:`, error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+
+    allRows.push(...data);
+    if (data.length < PAGE_SIZE) break; // last page
+    from += PAGE_SIZE;
   }
-  return data || [];
+
+  return allRows;
 }

@@ -147,7 +147,7 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
   return (
     <div 
       ref={modalRef}
-      className="absolute top-14 right-0 w-80 bg-gray-800 text-white border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden"
+      className="absolute top-14 right-0 w-80 bg-gray-800 text-white border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="account-settings-title"
@@ -278,13 +278,6 @@ const AccountSettingsModal = ({ showModal, onClose, handleSignOut, user }) => {
             </>
           )}
         </button>
-      </div>
-
-      {/* Info Footer */}
-      <div className="px-4 py-3 bg-gray-900/30 border-t border-gray-700">
-        <p className="text-xs text-gray-500 text-center">
-          💡 Your data is securely backed up in the cloud database
-        </p>
       </div>
     </div>
   );

@@ -832,7 +832,7 @@ const AppInner = () => {
                     </>
                   ) : (
                     <>
-                      <div className="overflow-x-hidden md:overflow-visible flex flex-nowrap gap-1 mb-8 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-5">
+                      <div className="overflow-x-auto md:overflow-visible flex flex-nowrap gap-1 mb-8 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-5">
                         {playlists.map((playlist) => (
                           <PlaylistCard
                             key={playlist.id}
