@@ -339,6 +339,8 @@
 
 .al-foot a { color: var(--teal); text-decoration: none; }
 
+.al-foot-made a { font-weight: 600; }
+
 /* Mobile-only pinned copy — see AndroidLanding.jsx. */
 .al-pinned-copy { display: none; }
 

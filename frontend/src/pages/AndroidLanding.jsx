@@ -13,6 +13,7 @@ const RELEASES_URL = 'https://github.com/ab007shetty/ViMusicAndroid/releases/lat
 const VERSION = '1.0.2';
 const SOURCE_URL = 'https://github.com/ab007shetty/ViMusicAndroid';
 const WEB_APP_URL = 'https://vimusic.vercel.app/';
+const AUTHOR_URL = 'https://abshetty.com';
 
 // Each feature owns a screenshot — the screenshots are the content here, not
 // decoration, so every one of them earns a section.
@@ -377,6 +378,11 @@ const AndroidLanding = () => {
             <span>Inspired by <a href="https://github.com/vfsfitvnm/ViMusic" target="_blank" rel="noopener noreferrer">vfsfitvnm/ViMusic</a></span>
             <span>Lyrics by <a href="https://lrclib.net" target="_blank" rel="noopener noreferrer">LRCLIB</a></span>
           </span>
+          <span className="al-foot-made">
+            Made with ❤️ by{' '}
+            <a href={AUTHOR_URL} target="_blank" rel="noopener noreferrer">abshetty</a>
+          </span>
+
           <span>
             <a href={WEB_APP_URL}>Web app</a>
             {' · '}

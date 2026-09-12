@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "// rewrites": "Single-page app: /android and any other client route must be served index.html. Vercel checks the filesystem first, so real files (/images, /sw.js, /sitemap.xml) are unaffected.",
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "headers": [
     {
