@@ -1,5 +1,5 @@
-import { supabase } from "../../../lib/supabase.js";
-import { getUserId, handlePreflight } from "../../../lib/auth.js";
+import { supabase } from "./supabase.js";
+import { getUserId, handlePreflight } from "./auth.js";
 
 /**
  * POST /api/songs/:songId/play

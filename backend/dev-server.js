@@ -49,9 +49,7 @@ import playlistsHandler from "./api/playlists.js";
 import playlistIdHandler from "./api/playlists/[id].js";
 import songsHandler from "./api/songs.js";
 import favoritesHandler from "./api/favorites.js";
-import songPlaylistsHandler from "./api/songs/[songId]/playlists.js";
-import songFavoriteHandler from "./api/songs/[songId]/favorite.js";
-import songPlayHandler from "./api/songs/[songId]/play.js";
+import songActionHandler from "./api/songs/[songId]/[action].js";
 import importDatabaseHandler from "./api/import-database/[email].js";
 import exportDatabaseHandler from "./api/export-database/[email].js";
 import loginHandler from "./api/login/[email].js";
@@ -65,9 +63,8 @@ app.all("/api/songs", adaptVercelHandler(songsHandler));
 app.all("/api/favorites", adaptVercelHandler(favoritesHandler));
 app.all("/api/search-history", adaptVercelHandler(searchHistoryHandler));
 
-app.all("/api/songs/:songId/playlists", injectQuery(songPlaylistsHandler));
-app.all("/api/songs/:songId/favorite", injectQuery(songFavoriteHandler));
-app.all("/api/songs/:songId/play", injectQuery(songPlayHandler));
+// One dispatcher for favorite/play/playlists — see the route file for why.
+app.all("/api/songs/:songId/:action", injectQuery(songActionHandler));
 app.all("/api/import-database/:email", injectQuery(importDatabaseHandler));
 app.all("/api/export-database/:email", injectQuery(exportDatabaseHandler));
 app.all("/api/login/:email", injectQuery(loginHandler));
