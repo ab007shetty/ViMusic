@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { usePlayer } from '../contexts/PlayerContext';
 import { usePlaybackTime } from '../contexts/PlaybackTimeContext';
 import { fetchFromServer, isLoggedIn, getUserEmail } from '../utils/api';
+import { thumbnailFor, handleThumbnailError, handleThumbnailLoad } from '../utils/thumbnails';
 import {
   Play, Pause, SkipForward, SkipBack, Volume2, VolumeX,
   Shuffle, Repeat, Repeat1, X, Film, Music, ChevronDown, Maximize2, Subtitles, ListMusic
@@ -432,8 +433,13 @@ const Player = () => {
       >
         {/* No top header — maximize media space */}
 
-        {/* Center: Artwork or Video — takes all remaining space */}
-        <div className="close-on-click flex-1 relative min-h-0 overflow-hidden">
+        {/* Row: video/artwork + the queue panel as a flex sibling (desktop
+            only — there's no way to open it on mobile). Stretching them in
+            a flex row means the queue panel's height always matches the
+            video/artwork area exactly, with no viewport-offset guessing —
+            it grows/shrinks by width only, animated via overflow-hidden. */}
+        <div className="close-on-click flex-1 min-h-0 flex overflow-hidden">
+          <div className="close-on-click flex-1 relative overflow-hidden">
           {/* YouTube Video Wrapper — absolutely fills container */}
           <div className={`close-on-click absolute inset-0 flex items-center justify-center p-4 transition-all duration-500 ${
             isVideoMode ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-95 pointer-events-none'
@@ -488,11 +494,30 @@ const Player = () => {
               }}
             >
               <img 
-                src={currentSong.thumbnailUrl?.replace(/w60-h60|w120-h120/, 'w1000-h1000') || '/images/default.jpg'}
+                src={thumbnailFor(currentSong.thumbnailUrl, 'full')}
                 alt={currentSong.title}
+                onError={handleThumbnailError}
+                onLoad={handleThumbnailLoad}
                 className="w-full h-full object-cover"
               />
             </div>
+          </div>
+          </div>
+
+          {/* Stretches to the full height of this row in both modes, so it
+              sits flush under the navbar rather than being inset to match
+              the letterboxed video box. The event handlers stop scrolling
+              and swiping inside the queue from bubbling up to the overlay,
+              which otherwise reads it as "scroll down to minimize" and
+              closes the player. */}
+          <div
+            className={`hidden md:block overflow-hidden transition-all duration-300 ease-out ${isQueueOpen ? 'w-80' : 'w-0'}`}
+            onWheel={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            <QueuePanel onClose={() => setIsQueueOpen(false)} />
           </div>
         </div>
 
@@ -710,8 +735,10 @@ const Player = () => {
           <div className="flex items-center space-x-4 min-w-0 md:w-1/4">
             <div className="relative group overflow-hidden rounded-md shadow-lg flex-shrink-0">
               <img
-                src={currentSong.thumbnailUrl?.replace(/w60-h60/, 'w120-h120') || '/images/default.jpg'}
+                src={thumbnailFor(currentSong.thumbnailUrl, 'card')}
                 alt={currentSong.title}
+                onError={handleThumbnailError}
+                onLoad={handleThumbnailLoad}
                 className={`transition-all duration-300 group-hover:scale-110 ${isMobile ? 'w-12 h-12' : 'w-14 h-14'}`}
               />
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -818,8 +845,6 @@ const Player = () => {
           </div>
         </div>
       </div>
-
-      <QueuePanel isOpen={isQueueOpen} onClose={() => setIsQueueOpen(false)} />
     </>
   );
 };

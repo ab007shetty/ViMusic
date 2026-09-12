@@ -113,6 +113,47 @@ export async function fetchVideoMetadata(videoId, apiKey, source = 'youtube', is
 }
 
 /**
+ * Looks up durations for a batch of video IDs.
+ *
+ * The /search endpoint doesn't return duration at all — it only exists on
+ * /videos under contentDetails — so search results have to be enriched with
+ * a second call or they get saved with an empty durationText.
+ *
+ * @param {string[]} videoIds
+ * @param {string} apiKey
+ * @returns {Promise<Record<string, string>>} id → "4:33"
+ */
+export async function fetchDurations(videoIds, apiKey) {
+  if (!videoIds?.length) return {};
+
+  // /videos accepts up to 50 ids per request, so a page of results is one call.
+  const chunks = [];
+  for (let i = 0; i < videoIds.length; i += 50) {
+    chunks.push(videoIds.slice(i, i + 50));
+  }
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const resp = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${chunk.join(',')}&key=${apiKey}`
+        );
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return (data.items || []).map((item) => [
+          item.id,
+          parseDuration(item.contentDetails?.duration || ''),
+        ]);
+      } catch {
+        return []; // a failed lookup just means no duration, not a failed search
+      }
+    })
+  );
+
+  return Object.fromEntries(results.flat());
+}
+
+/**
  * Converts ISO 8601 duration string to "m:ss" format.
  * e.g. "PT4M33S" → "4:33",  "PT1H2M5S" → "1:02:05"
  */

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { usePlaybackTime } from './PlaybackTimeContext';
+import { thumbnailFor } from '../utils/thumbnails';
 
 const PlayerContext = createContext();
 
@@ -136,8 +137,11 @@ export const PlayerProvider = ({ children }) => {
         title: currentSong.title,
         artist: currentSong.artistsText || 'Unknown Artist',
         album: 'ViMusic',
+        // Lock-screen / notification artwork. `sizes` is a hint the OS uses
+        // to pick between entries, not a resize instruction, so handing it
+        // the full-resolution image is what makes it look sharp there.
         artwork: [
-          { src: currentSong.thumbnailUrl?.replace(/w\d+-h\d+/, 'w512-h512') || '', sizes: '512x512', type: 'image/jpeg' }
+          { src: thumbnailFor(currentSong.thumbnailUrl, 'safe'), sizes: '640x480', type: 'image/jpeg' }
         ]
       });
 
@@ -315,6 +319,19 @@ export const PlayerProvider = ({ children }) => {
     // See playNext — preserve video/audio mode across skips.
   }, [queue, currentIndex, setProgress, setDuration]);
 
+  // Jumping to a track in the queue that's already playing (from the Up
+  // Next panel). This is a skip, not a fresh start, so — like playNext and
+  // playPrevious — it leaves video/audio mode alone. Going through
+  // playQueue here would reset you to audio mid-session.
+  const jumpToQueueIndex = useCallback((index) => {
+    if (index < 0 || index >= queue.length) return;
+    setCurrentIndex(index);
+    setCurrentSong(queue[index]);
+    setIsPlaying(true);
+    setProgress(0);
+    setDuration(0);
+  }, [queue, setProgress, setDuration]);
+
   const seekTo = useCallback((percent) => {
     if (!playerRef.current) return;
     try {
@@ -402,6 +419,7 @@ export const PlayerProvider = ({ children }) => {
     togglePlay,
     playNext,
     playPrevious,
+    jumpToQueueIndex,
     seekTo,
     changeVolume,
     toggleShuffle,
@@ -414,7 +432,7 @@ export const PlayerProvider = ({ children }) => {
     setIsExpanded,
   }), [
     currentSong, isPlaying, volume, queue, currentIndex, shuffle, repeat, isVideoMode, isExpanded,
-    playSong, playQueue, togglePlay, playNext, playPrevious, seekTo, changeVolume,
+    playSong, playQueue, togglePlay, playNext, playPrevious, jumpToQueueIndex, seekTo, changeVolume,
     toggleShuffle, toggleRepeat, toggleVideoMode, addToQueue, removeFromQueue, closePlayer,
   ]);
 

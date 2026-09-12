@@ -3,7 +3,7 @@ import { PlayerProvider } from './contexts/PlayerContext';
 import { usePlayer } from './contexts/PlayerContext';
 import { PlaybackTimeProvider } from './contexts/PlaybackTimeContext';
 import { fetchFromServer, setUserEmail, getUserEmail } from './utils/api';
-import { fetchVideoMetadata } from './utils/youtubeUtils';
+import { fetchVideoMetadata, fetchDurations } from './utils/youtubeUtils';
 import { X, Plus } from 'lucide-react';
 import { supabase } from './supabase';
 import { switchToUserDatabase } from './utils/databaseUtils';
@@ -44,10 +44,20 @@ const AppInner = () => {
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
 
+  // Read inside the realtime channel callback below so a silent background
+  // refresh re-requests exactly as many songs as are currently on screen
+  // instead of collapsing a "Load more"-expanded list back down to one page.
+  const songsRef = useRef([]);
+  songsRef.current = songs;
+  const selectedPlaylistSongsRef = useRef([]);
+  selectedPlaylistSongsRef.current = selectedPlaylistSongs;
+  const activePlaylistIdRef = useRef(null);
+
   const mainScrollRef = useRef(null);
   const { scrollToTop } = useSmoothScroll(mainScrollRef);
 
   const [activePlaylistId, setActivePlaylistId] = useState(null);
+  activePlaylistIdRef.current = activePlaylistId;
 
   // Scroll back to the top on genuine navigation (switching tabs, a fresh
   // search, picking a different playlist) — otherwise the scroll container
@@ -57,6 +67,34 @@ const AppInner = () => {
   useEffect(() => {
     scrollToTop();
   }, [activeTab, isSearching, activePlaylistId, lastSearchQuery, scrollToTop]);
+
+  // Reveal-on-scroll-up for the playlist row: once you're deep in a long
+  // playlist, switching to another one shouldn't mean scrolling all the way
+  // back to the top. It slides away while reading downward and comes back
+  // as soon as you scroll up. Desktop only — the mobile row is a horizontal
+  // strip that would eat too much of a small screen.
+  const [playlistBarHidden, setPlaylistBarHidden] = useState(false);
+  const lastScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    const el = mainScrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const y = el.scrollTop;
+      const prev = lastScrollTopRef.current;
+
+      // Near the top the row is in its natural place, so never hide it there.
+      if (y < 120) setPlaylistBarHidden(false);
+      else if (y > prev + 4) setPlaylistBarHidden(true);
+      else if (y < prev - 4) setPlaylistBarHidden(false);
+
+      lastScrollTopRef.current = y;
+    };
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -89,69 +127,116 @@ const AppInner = () => {
   // they update data without swapping the whole grid out for the loading
   // skeleton first. A real tab switch (the default, silent omitted) still
   // shows the skeleton since there's genuinely nothing to show yet.
+  // Every library list is paged 20 at a time instead of fetched whole —
+  // loadMoreLibrary() below fetches subsequent pages with { append: true }.
+  const LIBRARY_PAGE_SIZE = 20;
+  const [hasMoreSongs, setHasMoreSongs] = useState(false);
+  const [isLoadingMoreSongs, setIsLoadingMoreSongs] = useState(false);
+
   const fetchSongs = useCallback(async (opts = {}) => {
-    if (!opts.silent) setLoading(true);
+    if (!opts.silent && !opts.append) setLoading(true);
     try {
       // Logged-in users get their own real Most Played (by totalPlayTimeMs).
       // Guests keep seeing the curated "Master's Mix" (site owner's
       // favorites), matching the README's documented guest experience.
       const email = getUserEmail();
+      const offset = opts.append ? opts.offset || 0 : 0;
+      const pageParams = `limit=${opts.limit || LIBRARY_PAGE_SIZE}&offset=${offset}`;
       const data = email
-        ? await fetchFromServer('songs')
-        : await fetchFromServer('favorites', { headers: { 'X-User-Email': 'ab007shetty@gmail.com' } });
+        ? await fetchFromServer(`songs?${pageParams}`)
+        : await fetchFromServer(`favorites?${pageParams}`, { headers: { 'X-User-Email': 'ab007shetty@gmail.com' } });
       if (activeTabRef.current === 'mostPlayed') {
-        setSongs(data.songs || []);
+        setSongs((prev) => (opts.append ? [...prev, ...(data.songs || [])] : (data.songs || [])));
+        setHasMoreSongs(!!data.hasMore);
       }
     } catch (error) {
       console.error('Error fetching Most Played:', error);
       toast.error('Failed to load Most Played');
     } finally {
-      if (!opts.silent) setLoading(false);
+      if (!opts.silent && !opts.append) setLoading(false);
     }
   }, []);
 
   const fetchRecentlyPlayed = useCallback(async (opts = {}) => {
-    if (!opts.silent) setLoading(true);
+    if (!opts.silent && !opts.append) setLoading(true);
     try {
-      const data = await fetchFromServer('songs?orderBy=lastPlayedAt');
+      const offset = opts.append ? opts.offset || 0 : 0;
+      const data = await fetchFromServer(`songs?orderBy=lastPlayedAt&limit=${opts.limit || LIBRARY_PAGE_SIZE}&offset=${offset}`);
       if (activeTabRef.current === 'recentlyPlayed') {
-        setSongs(data.songs || []);
+        setSongs((prev) => (opts.append ? [...prev, ...(data.songs || [])] : (data.songs || [])));
+        setHasMoreSongs(!!data.hasMore);
       }
     } catch (error) {
       console.error('Error fetching Recently Played:', error);
       toast.error('Failed to load Recently Played');
     } finally {
-      if (!opts.silent) setLoading(false);
+      if (!opts.silent && !opts.append) setLoading(false);
     }
   }, []);
 
   const fetchFavorites = useCallback(async (opts = {}) => {
-    if (!opts.silent) setLoading(true);
+    if (!opts.silent && !opts.append) setLoading(true);
     try {
-      const data = await fetchFromServer('favorites');
+      const offset = opts.append ? opts.offset || 0 : 0;
+      const data = await fetchFromServer(`favorites?limit=${opts.limit || LIBRARY_PAGE_SIZE}&offset=${offset}`);
       if (activeTabRef.current === 'favorites') {
-        setSongs(data.songs || []);
+        setSongs((prev) => (opts.append ? [...prev, ...(data.songs || [])] : (data.songs || [])));
+        setHasMoreSongs(!!data.hasMore);
       }
     } catch (error) {
       console.error('Error fetching favorites:', error);
       toast.error('Failed to load favorites');
     } finally {
-      if (!opts.silent) setLoading(false);
+      if (!opts.silent && !opts.append) setLoading(false);
+    }
+  }, []);
+
+  // Every song id the user has favorited. Library rows carry likedAt and
+  // could answer this themselves, but YouTube search results don't — without
+  // this set, a song already in Favorites shows an empty heart when it turns
+  // up in search.
+  const [favoriteIds, setFavoriteIds] = useState(() => new Set());
+
+  const fetchFavoriteIds = useCallback(async () => {
+    if (!getUserEmail()) {
+      setFavoriteIds(new Set());
+      return;
+    }
+    try {
+      const data = await fetchFromServer('favorites?idsOnly=1');
+      setFavoriteIds(new Set(data.ids || []));
+    } catch (error) {
+      console.error('Error fetching favorite ids:', error);
+    }
+  }, []);
+
+  const [searchHistory, setSearchHistory] = useState([]);
+
+  // Guests have no personal history to sync (matches the realtime effect's
+  // guest skip below), so this is only ever called for a signed-in user.
+  const fetchSearchHistory = useCallback(async () => {
+    try {
+      const data = await fetchFromServer('search-history');
+      setSearchHistory(data.history || []);
+    } catch (error) {
+      console.error('Error fetching search history:', error);
     }
   }, []);
 
   const fetchSongsForPlaylist = useCallback(async (playlistId, opts = {}) => {
-    if (!opts.silent) setLoading(true);
+    if (!opts.silent && !opts.append) setLoading(true);
     try {
       const email = getUserEmail();
       const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
-      const data = await fetchFromServer(`playlists/${playlistId}/songs`, { headers });
-      setSelectedPlaylistSongs(data.songs || []);
+      const offset = opts.append ? opts.offset || 0 : 0;
+      const data = await fetchFromServer(`playlists/${playlistId}/songs?limit=${opts.limit || LIBRARY_PAGE_SIZE}&offset=${offset}`, { headers });
+      setSelectedPlaylistSongs((prev) => (opts.append ? [...prev, ...(data.songs || [])] : (data.songs || [])));
+      setHasMoreSongs(!!data.hasMore);
     } catch (error) {
       console.error('Error fetching playlist songs:', error);
       toast.error('Failed to load playlist songs');
     } finally {
-      if (!opts.silent) setLoading(false);
+      if (!opts.silent && !opts.append) setLoading(false);
     }
   }, []);
 
@@ -161,18 +246,21 @@ const AppInner = () => {
       const email = getUserEmail();
       const headers = !email ? { 'X-User-Email': 'ab007shetty@gmail.com' } : {};
       const data = await fetchFromServer('playlists', { headers });
-      const imageMap = {
-        'High': '/images/high.jpeg',
-        'Low': '/images/low.jpeg',
-        'Peace': '/images/peace.jpeg',
-        'Kannada': '/images/kannada.jpg',
-        'Beats': '/images/beats.jpeg',
-      };
 
-      const playlistsWithImages = (data.playlists || []).map((playlist) => ({
-        ...playlist,
-        thumbnailUrl: imageMap[playlist.name] || '/images/default.jpg',
-      }));
+      // coverUrl is either the cover explicitly picked for the playlist or,
+      // failing that, the first song's artwork (filled in by the backend).
+      // No stock-image fallback — PlaylistCard draws its own tile when a
+      // playlist genuinely has no artwork to show yet.
+      // Playlists are always listed alphabetically. The sort/order controls
+      // on this screen apply to the songs inside the selected playlist, not
+      // to the playlist row itself — otherwise the row would reshuffle
+      // underneath you every time you re-sorted the songs.
+      const playlistsWithImages = (data.playlists || [])
+        .map((playlist) => ({
+          ...playlist,
+          thumbnailUrl: playlist.coverUrl || '',
+        }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
       setPlaylists(playlistsWithImages);
 
@@ -191,6 +279,41 @@ const AppInner = () => {
       if (!opts.silent) setLoading(false);
     }
   }, [fetchSongsForPlaylist]);
+
+  // Refetches whatever is currently on screen, without the loading skeleton.
+  // Reads the active view from refs rather than props/state so it stays
+  // referentially stable — the realtime channel below depends on it, and a
+  // changing identity there would tear the subscription down and rebuild it
+  // on every tab switch.
+  const lastResyncRef = useRef(0);
+
+  const resyncCurrentView = useCallback(() => {
+    // focus/visibilitychange/online routinely fire together when a tab comes
+    // back, and a re-subscribe can land in the same instant. Collapse those
+    // into one refetch.
+    const now = Date.now();
+    if (now - lastResyncRef.current < 1500) return;
+    lastResyncRef.current = now;
+
+    const tab = activeTabRef.current;
+    const keepLimit = Math.max(songsRef.current.length, LIBRARY_PAGE_SIZE);
+
+    if (tab === 'favorites') fetchFavorites({ silent: true, limit: keepLimit });
+    else if (tab === 'mostPlayed') fetchSongs({ silent: true, limit: keepLimit });
+    else if (tab === 'recentlyPlayed') fetchRecentlyPlayed({ silent: true, limit: keepLimit });
+    else if (tab === 'playlists') {
+      fetchPlaylists({ skipAutoSelect: true, silent: true });
+      if (activePlaylistIdRef.current) {
+        fetchSongsForPlaylist(activePlaylistIdRef.current, {
+          silent: true,
+          limit: Math.max(selectedPlaylistSongsRef.current.length, LIBRARY_PAGE_SIZE),
+        });
+      }
+    }
+
+    fetchFavoriteIds();
+    fetchSearchHistory();
+  }, [fetchFavorites, fetchSongs, fetchRecentlyPlayed, fetchPlaylists, fetchSongsForPlaylist, fetchFavoriteIds, fetchSearchHistory]);
 
   // Playlist Management Functions
   const handleCreatePlaylist = async (playlistName) => {
@@ -250,6 +373,20 @@ const AppInner = () => {
       console.error('Error deleting playlist:', error);
       toast.error('Failed to delete playlist');
       throw error;
+    }
+  };
+
+  const handleSetPlaylistCover = async (playlistId, coverUrl) => {
+    try {
+      await fetchFromServer(`playlists/${playlistId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ coverUrl }),
+      });
+      toast.success('Playlist cover updated!');
+      await fetchPlaylists({ silent: true, skipAutoSelect: true });
+    } catch (error) {
+      console.error('Error setting playlist cover:', error);
+      toast.error('Failed to set playlist cover');
     }
   };
 
@@ -348,34 +485,86 @@ const AppInner = () => {
   // Guests have no favorites/playlists of their own to sync, and the RLS
   // policy only grants them the shared '' bucket anyway, so skip entirely
   // when logged out.
+  //
+  // Subscribed once per signed-in user and then left alone. This used to
+  // depend on activeTab and activePlaylistId as well, so every navigation
+  // tore the websocket down and built a new one -- and anything the phone
+  // changed during that round trip arrived at a channel that no longer
+  // existed and was simply lost. That is the whole story behind favourites
+  // showing up here "sometimes". What the handlers need to know about the
+  // current view is read from refs, which are assigned on every render and
+  // are therefore always current without being dependencies.
   useEffect(() => {
-    if (!currentUser?.email) return;
+    const email = currentUser?.email;
+    if (!email) return;
 
-    const scopedUserId = currentUser.email.toLowerCase().trim();
+    const scopedUserId = email.toLowerCase().trim();
     const userFilter = `user_id=eq.${scopedUserId}`;
 
     // All of these pass { silent: true } — this is a background sync of
     // data the user is already looking at, not a navigation, so it should
     // never swap the grid out for the loading skeleton.
+    const refreshVisibleSongs = () => {
+      const tab = activeTabRef.current;
+      const playlistId = activePlaylistIdRef.current;
+      // Re-request as many songs as are already on screen (at least one
+      // page) so a background sync can't collapse a "Load more"-expanded
+      // list back down to the first page.
+      const keepLimit = Math.max(songsRef.current.length, LIBRARY_PAGE_SIZE);
+
+      if (tab === 'favorites') fetchFavorites({ silent: true, limit: keepLimit });
+      else if (tab === 'mostPlayed') fetchSongs({ silent: true, limit: keepLimit });
+      else if (tab === 'recentlyPlayed') fetchRecentlyPlayed({ silent: true, limit: keepLimit });
+      else if (tab === 'playlists' && playlistId) {
+        fetchSongsForPlaylist(playlistId, {
+          silent: true,
+          limit: Math.max(selectedPlaylistSongsRef.current.length, LIBRARY_PAGE_SIZE),
+        });
+      }
+      // A favorite toggled on the phone has to re-colour the heart on any
+      // search results currently on screen here too.
+      fetchFavoriteIds();
+    };
+
     const channel = supabase
       .channel(`db-changes-${scopedUserId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'song', filter: userFilter }, () => {
-        // Refresh whichever tab is active
-        if (activeTab === 'favorites') fetchFavorites({ silent: true });
-        else if (activeTab === 'mostPlayed') fetchSongs({ silent: true });
-        else if (activeTab === 'recentlyPlayed') fetchRecentlyPlayed({ silent: true });
-        else if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId, { silent: true });
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'song', filter: userFilter }, refreshVisibleSongs)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'song_playlist_map', filter: userFilter }, () => {
-        if (activeTab === 'playlists' && activePlaylistId) fetchSongsForPlaylist(activePlaylistId, { silent: true });
+        const playlistId = activePlaylistIdRef.current;
+        if (playlistId) {
+          fetchSongsForPlaylist(playlistId, {
+            silent: true,
+            limit: Math.max(selectedPlaylistSongsRef.current.length, LIBRARY_PAGE_SIZE),
+          });
+        }
+        // The grid shows a song count per playlist, and adding a track from
+        // the phone changes it whether or not that playlist happens to be
+        // open here. Without this the count only caught up on a refresh.
+        fetchPlaylists({ skipAutoSelect: true, silent: true });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist', filter: userFilter }, () => {
         fetchPlaylists({ skipAutoSelect: true, silent: true });
       })
+      // Keeps search history in sync both ways: a query typed on the phone
+      // (or another browser tab) shows up here instantly, and vice versa.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'search_history', filter: userFilter }, () => {
+        fetchSearchHistory();
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [currentUser, activeTab, activePlaylistId, fetchFavorites, fetchSongs, fetchRecentlyPlayed, fetchSongsForPlaylist, fetchPlaylists]);
+  }, [currentUser?.email, fetchFavorites, fetchSongs, fetchRecentlyPlayed, fetchSongsForPlaylist, fetchPlaylists, fetchSearchHistory, fetchFavoriteIds]);
+
+  // Load search history once a user is known — guests get none (see
+  // fetchSearchHistory), and realtime keeps it fresh after this.
+  useEffect(() => {
+    if (currentUser?.email) {
+      fetchSearchHistory();
+    } else {
+      setSearchHistory([]);
+    }
+    fetchFavoriteIds();
+  }, [currentUser, fetchSearchHistory, fetchFavoriteIds]);
 
   // Search a song directly from a YouTube/YouTube Music URL (strip ID → fetch metadata → show as result)
   const handleUrlSearch = useCallback(async (videoId, source, isShort = false) => {
@@ -428,17 +617,37 @@ const AppInner = () => {
           title: item.snippet.title,
           artistsText: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
-          // "medium" (320x180) instead of "high" (480x360) — grid cards
-          // never render larger than ~224px tall, so the extra resolution
-          // was pure wasted transfer weight across dozens of results.
-          thumbnailUrl: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.high.url,
+          // Store the best the API offers; thumbnailFor() picks the right
+          // size per surface at render time.
+          thumbnailUrl: item.snippet.thumbnails.maxres?.url || item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
           durationText: '',
           source: 'youtube',
           isVideo: true,
         }));
+
+        // /search never returns duration, so fill it in before showing the
+        // results — otherwise favoriting one saves an empty durationText.
+        const durations = await fetchDurations(formattedResults.map((s) => s.id), apiKey);
+        formattedResults.forEach((song) => {
+          song.durationText = durations[song.id] || '';
+        });
+
         setSearchResults(formattedResults);
         setNextPageToken(data.nextPageToken || null);
         toast.success(`Found ${formattedResults.length} results`);
+
+        if (getUserEmail()) {
+          // Optimistic local update so it shows immediately; realtime
+          // (and the Android app) will reconcile it across devices.
+          setSearchHistory((prev) => [
+            { query, timestamp: Date.now() },
+            ...prev.filter((h) => h.query !== query),
+          ].slice(0, 15));
+          fetchFromServer('search-history', {
+            method: 'POST',
+            body: JSON.stringify({ query }),
+          }).catch((err) => console.error('Error saving search history:', err));
+        }
       } else {
         toast.error('No results found');
       }
@@ -467,14 +676,19 @@ const AppInner = () => {
           title: item.snippet.title,
           artistsText: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
-          // "medium" (320x180) instead of "high" (480x360) — grid cards
-          // never render larger than ~224px tall, so the extra resolution
-          // was pure wasted transfer weight across dozens of results.
-          thumbnailUrl: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.high.url,
+          // Store the best the API offers; thumbnailFor() picks the right
+          // size per surface at render time.
+          thumbnailUrl: item.snippet.thumbnails.maxres?.url || item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
           durationText: '',
           source: 'youtube',
           isVideo: true,
         }));
+
+        const durations = await fetchDurations(formattedResults.map((s) => s.id), apiKey);
+        formattedResults.forEach((song) => {
+          song.durationText = durations[song.id] || '';
+        });
+
         setSearchResults((prev) => {
           const seen = new Set(prev.map((s) => s.id));
           return [...prev, ...formattedResults.filter((s) => !seen.has(s.id))];
@@ -493,6 +707,62 @@ const AppInner = () => {
     setIsSearching(false);
     setSearchResults([]);
   }, []);
+
+  // Loads the next page for whichever list is on screen (Most Played,
+  // Favorites, Recently Played, or a playlist) — separate from
+  // handleLoadMoreResults above, which pages YouTube search results.
+  const handleLoadMoreLibrary = useCallback(async () => {
+    if (!hasMoreSongs || isLoadingMoreSongs) return;
+    setIsLoadingMoreSongs(true);
+    try {
+      if (activeTab === 'mostPlayed') {
+        await fetchSongs({ append: true, offset: songs.length });
+      } else if (activeTab === 'favorites') {
+        await fetchFavorites({ append: true, offset: songs.length });
+      } else if (activeTab === 'recentlyPlayed') {
+        await fetchRecentlyPlayed({ append: true, offset: songs.length });
+      } else if (activeTab === 'playlists' && activePlaylistId) {
+        await fetchSongsForPlaylist(activePlaylistId, { append: true, offset: selectedPlaylistSongs.length });
+      }
+    } finally {
+      setIsLoadingMoreSongs(false);
+    }
+  }, [activeTab, activePlaylistId, songs.length, selectedPlaylistSongs.length, hasMoreSongs, isLoadingMoreSongs, fetchSongs, fetchFavorites, fetchRecentlyPlayed, fetchSongsForPlaylist]);
+
+  // ── Infinite scroll ───────────────────────────────────────────────────
+  // A sentinel div sits under the grid; when it scrolls into view the next
+  // page loads on its own. Kept in a ref (rather than the observer's deps)
+  // so the observer is created once per sentinel mount but always runs
+  // against current state — recreating it on every state change would make
+  // it re-fire its initial callback and request pages in a loop.
+  const autoLoadRef = useRef(() => {});
+  autoLoadRef.current = () => {
+    if (isSearching) {
+      if (nextPageToken && !isLoadingMore) handleLoadMoreResults();
+    } else if (hasMoreSongs && !isLoadingMoreSongs) {
+      handleLoadMoreLibrary();
+    }
+  };
+
+  // Callback ref instead of a plain ref: the sentinel mounts and unmounts
+  // as the view switches, and this re-runs the effect each time it does.
+  const [loadMoreSentinel, setLoadMoreSentinel] = useState(null);
+
+  useEffect(() => {
+    const root = mainScrollRef.current;
+    if (!loadMoreSentinel || !root) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) autoLoadRef.current();
+      },
+      // Start fetching a bit before the sentinel is actually visible so the
+      // next page is usually there by the time the user reaches the end.
+      { root, rootMargin: '400px' }
+    );
+    observer.observe(loadMoreSentinel);
+    return () => observer.disconnect();
+  }, [loadMoreSentinel]);
 
   const handleViewPlaylists = useCallback(() => {
     setActiveTab('playlists');
@@ -545,6 +815,14 @@ const AppInner = () => {
     if (activeTab === 'favorites') {
       setSongs((prev) => prev.filter((s) => s.id !== songId));
     }
+    // Keep the heart correct on any other view showing this same song —
+    // notably search results, which have no likedAt of their own.
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(songId)) next.delete(songId);
+      else next.add(songId);
+      return next;
+    });
   }, [activeTab]);
 
   const handleSort = useCallback((sortValue) => {
@@ -584,13 +862,17 @@ const AppInner = () => {
         });
         break;
       case 'addedOn':
-        result.sort((a, b) => {
-          const timeA = a.likedAt || a.totalPlayTimeMs || 0;
-          const timeB = b.likedAt || b.totalPlayTimeMs || 0;
-          return sortOrder === 'asc' 
-            ? timeA - timeB
-            : timeB - timeA;
-        });
+        // Each view already arrives newest-first from the server, by the key
+        // that actually means "added" for that view: likedAt for favorites,
+        // position for a playlist, lastPlayedAt / totalPlayTimeMs for the
+        // history tabs. Re-sorting here by likedAt got playlists badly wrong
+        // — a song's like time has nothing to do with when it was added to
+        // a playlist, so favorited songs jumped to the top and songs with
+        // neither a like nor any play time fell to the bottom at 0. It also
+        // silently re-ordered Most Played and Recently Played away from the
+        // ranking the server had just computed. Descending is the server's
+        // own order; ascending just reverses it.
+        if (sortOrder === 'asc') result.reverse();
         break;
       default:
         break;
@@ -610,37 +892,34 @@ const AppInner = () => {
     const cards = Array.from(grid.children);
     if (!cards.length) return;
 
-    // Only animate cards that are actually new. Without this, appending
-    // ("Load more"), removing (un-favoriting, or a silent background sync
-    // re-delivering the same list), or any other re-render of this same
-    // list would re-trigger the fade-in on every already-visible card too
-    // — the whole grid flashing to invisible and back, which looks exactly
-    // like a page reload. Only a genuinely fresh view (new search, tab
-    // switch, sort/filter change) should animate everything.
+    // Only animate cards whose song wasn't already visible a moment ago —
+    // by id, not by position. A position-based "did it just get appended
+    // at the end" check (the old approach) misses a realtime sync that
+    // prepends a new favorite/most-played song at the *front* (both are
+    // sorted newest-first), falls through to "treat as a full replacement",
+    // and replays the fade-in on every already-visible card — the whole
+    // grid flashing to invisible and back, which looks exactly like a
+    // reload even with the loading skeleton already suppressed. Diffing by
+    // id handles a prepend, an append ("Load more"), a removal, or any
+    // combination correctly, and animates only the cards that are actually
+    // new. A genuinely fresh view (new search, tab switch) has zero
+    // overlap with the previous ids, so every card counts as new there.
     const currentIds = displayedSongs.map((s) => s.id);
     const prevIds = prevDisplayedSongIdsRef.current;
+    const prevIdSet = new Set(prevIds);
 
     const isUnchanged =
       currentIds.length === prevIds.length &&
       currentIds.every((id, i) => id === prevIds[i]);
 
-    const isAppend =
-      !isUnchanged &&
-      prevIds.length > 0 &&
-      currentIds.length > prevIds.length &&
-      prevIds.every((id, i) => currentIds[i] === id);
-
-    const isRemoval =
-      !isUnchanged &&
-      prevIds.length > 0 &&
-      currentIds.length < prevIds.length &&
-      currentIds.every((id) => prevIds.includes(id));
-
     prevDisplayedSongIdsRef.current = currentIds;
 
-    if (isUnchanged || isRemoval) return;
+    if (isUnchanged) return;
 
-    const cardsToAnimate = isAppend ? cards.slice(prevIds.length) : cards;
+    const newIdSet = new Set(currentIds.filter((id) => !prevIdSet.has(id)));
+    if (newIdSet.size === 0) return; // pure removal or reorder — nothing new to animate
+
+    const cardsToAnimate = cards.filter((_, i) => newIdSet.has(currentIds[i]));
     if (!cardsToAnimate.length) return;
 
     const tween = gsap.fromTo(
@@ -676,6 +955,15 @@ const AppInner = () => {
   const activePlaylistName = useMemo(() => {
     return playlists.find((p) => p.id === activePlaylistId)?.name || 'Playlist';
   }, [playlists, activePlaylistId]);
+
+  const handleRemoveHistoryItem = useCallback(async (query) => {
+    setSearchHistory((prev) => prev.filter((h) => h.query !== query));
+    try {
+      await fetchFromServer(`search-history?query=${encodeURIComponent(query)}`, { method: 'DELETE' });
+    } catch (error) {
+      console.error('Error removing search history item:', error);
+    }
+  }, []);
 
   return (
     <>
@@ -737,6 +1025,8 @@ const AppInner = () => {
           onUrlSearch={handleUrlSearch}
           onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           sidebarOpen={isSidebarOpen}
+          searchHistory={searchHistory}
+          onRemoveHistoryItem={handleRemoveHistoryItem}
         />
         
         <Sidebar
@@ -815,24 +1105,25 @@ const AppInner = () => {
                             onToggleFavorite={toggleFavorite}
                             songs={displayedSongs}
                             priority={index < 6}
+                            isFavorite={favoriteIds.has(song.id) || song.likedAt != null}
                           />
                         ))}
                       </div>
-                      {isSearching && nextPageToken && (
-                        <div className="flex justify-center mt-6">
-                          <button
-                            onClick={handleLoadMoreResults}
-                            disabled={isLoadingMore}
-                            className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full text-white font-medium transition-colors border border-gray-700"
-                          >
-                            {isLoadingMore ? 'Loading…' : 'Load more results'}
-                          </button>
+                      {(isSearching ? nextPageToken : hasMoreSongs) && (
+                        <div ref={setLoadMoreSentinel} className="flex justify-center py-6">
+                          {(isSearching ? isLoadingMore : isLoadingMoreSongs) && (
+                            <span className="text-sm text-gray-500">Loading…</span>
+                          )}
                         </div>
                       )}
                     </>
                   ) : (
                     <>
-                      <div className="overflow-x-auto md:overflow-visible flex flex-nowrap gap-1 mb-8 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-5">
+                      <div
+                        className={`overflow-x-auto md:overflow-visible flex flex-nowrap gap-1 mb-8 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-5
+                          md:sticky md:top-0 md:z-20 md:bg-gray-900/95 md:backdrop-blur-xl md:py-3 md:transition-transform md:duration-300 md:ease-out
+                          ${playlistBarHidden ? 'md:-translate-y-[calc(100%+2rem)]' : 'md:translate-y-0'}`}
+                      >
                         {playlists.map((playlist) => (
                           <PlaylistCard
                             key={playlist.id}
@@ -856,9 +1147,16 @@ const AppInner = () => {
                                 onToggleFavorite={toggleFavorite}
                                 songs={displayedSongs}
                                 priority={index < 6}
+                                isFavorite={favoriteIds.has(song.id) || song.likedAt != null}
+                                onSetAsCover={currentUser ? () => handleSetPlaylistCover(activePlaylistId, song.thumbnailUrl) : undefined}
                               />
                             ))}
                           </div>
+                          {hasMoreSongs && (
+                            <div ref={setLoadMoreSentinel} className="flex justify-center py-6">
+                              {isLoadingMoreSongs && <span className="text-sm text-gray-500">Loading…</span>}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

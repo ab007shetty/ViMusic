@@ -1,16 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Menu, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Menu, X, Clock } from 'lucide-react';
 import { supabase, signInWithGoogle, signOut as supabaseSignOut } from '../supabase';
 import toast from 'react-hot-toast';
 import { parseYouTubeUrl } from '../utils/youtubeUtils';
 import { uploadEmptyDatabase } from '../utils/databaseUtils';
 import AccountSettingsModal from './AccountSettingsModal';
 
-const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
+const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen, searchHistory = [], onRemoveHistoryItem }) => {
   const [query, setQuery] = useState('');
   const [user, setUser] = useState(null);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
+  const [showDesktopHistory, setShowDesktopHistory] = useState(false);
+  const [showMobileHistory, setShowMobileHistory] = useState(false);
+  const desktopSearchRef = useRef(null);
+  const mobileSearchRef = useRef(null);
+
+  // The dropdown only ever shows the 5 most recent — searchHistory itself
+  // can hold more (used elsewhere, e.g. synced from the Android app).
+  const recentHistory = searchHistory.slice(0, 5);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (desktopSearchRef.current && !desktopSearchRef.current.contains(event.target)) {
+        setShowDesktopHistory(false);
+      }
+      if (mobileSearchRef.current && !mobileSearchRef.current.contains(event.target)) {
+        setShowMobileHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     // Get initial session
@@ -26,8 +47,8 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleSearch = () => {
-    const trimmed = query.trim();
+  const runSearch = (text) => {
+    const trimmed = text.trim();
     if (!trimmed) return;
 
     // Check if the user pasted a YouTube or YouTube Music URL
@@ -38,6 +59,15 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
       onSearch?.(trimmed);
     }
     setShowSearchInput(false);
+    setShowDesktopHistory(false);
+    setShowMobileHistory(false);
+  };
+
+  const handleSearch = () => runSearch(query);
+
+  const handleHistorySelect = (historyQuery) => {
+    setQuery(historyQuery);
+    runSearch(historyQuery);
   };
 
   const handleKeyPress = (e) => {
@@ -91,7 +121,7 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
 
         {/* Center: Desktop Search */}
         <div className="hidden md:flex flex-1 max-w-2xl mx-8">
-          <div className="relative w-full">
+          <div className="relative w-full" ref={desktopSearchRef}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="search"
@@ -100,9 +130,37 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
+              onFocus={() => setShowDesktopHistory(true)}
               placeholder="Search songs, or paste a YouTube link..."
               className="w-full pl-10 pr-4 py-2.5 bg-gray-800/70 border border-gray-700 rounded-full text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
+
+            {showDesktopHistory && recentHistory.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                <ul>
+                  {recentHistory.map((item) => (
+                    <li
+                      key={item.query}
+                      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gray-700/70 cursor-pointer"
+                      onClick={() => handleHistorySelect(item.query)}
+                    >
+                      <Clock size={16} className="text-gray-500 flex-shrink-0" />
+                      <span className="flex-1 truncate text-sm text-gray-200">{item.query}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveHistoryItem?.(item.query);
+                        }}
+                        aria-label={`Remove "${item.query}" from search history`}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-600 transition-opacity"
+                      >
+                        <X size={14} className="text-gray-400" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 
@@ -163,7 +221,7 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
       {/* Mobile Full-Width Search Dropdown */}
       {showSearchInput && (
         <div className="md:hidden absolute top-full left-0 right-0 bg-gray-900/95 backdrop-blur-xl border-b border-gray-800 p-4 shadow-2xl">
-          <div className="relative">
+          <div className="relative" ref={mobileSearchRef}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="search"
@@ -172,10 +230,38 @@ const Header = ({ onSearch, onUrlSearch, onSidebarToggle, sidebarOpen }) => {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
+              onFocus={() => setShowMobileHistory(true)}
               placeholder="Search or paste a YouTube link..."
               autoFocus
               className="w-full pl-10 pr-4 py-3 bg-gray-800/70 border border-gray-700 rounded-full text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
+
+            {showMobileHistory && recentHistory.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                <ul>
+                  {recentHistory.map((item) => (
+                    <li
+                      key={item.query}
+                      className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-700/70 cursor-pointer"
+                      onClick={() => handleHistorySelect(item.query)}
+                    >
+                      <Clock size={16} className="text-gray-500 flex-shrink-0" />
+                      <span className="flex-1 truncate text-sm text-gray-200">{item.query}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveHistoryItem?.(item.query);
+                        }}
+                        aria-label={`Remove "${item.query}" from search history`}
+                        className="p-1 rounded-full hover:bg-gray-600 transition-colors"
+                      >
+                        <X size={14} className="text-gray-400" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}

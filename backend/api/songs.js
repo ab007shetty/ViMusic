@@ -15,12 +15,17 @@ export default async function handler(req, res) {
   const userId = getUserId(req);
   const orderColumn = req.query.orderBy === "lastPlayedAt" ? "lastPlayedAt" : "totalPlayTimeMs";
 
+  // Page through the library instead of returning everything at once — the
+  // frontend requests 20 at a time and asks for more as the user scrolls.
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
   try {
     let query = supabase
       .from("song")
       .select("*")
       .order(orderColumn, { ascending: false })
-      .limit(100);
+      .range(offset, offset + limit - 1);
 
     query = query.eq("user_id", userId);
 
@@ -39,7 +44,7 @@ export default async function handler(req, res) {
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json({ songs: data || [] });
+    res.json({ songs: data || [], hasMore: (data || []).length === limit });
   } catch (error) {
     console.error("❌ Error fetching songs:", error);
     res.status(500).json({ error: "Failed to fetch songs" });

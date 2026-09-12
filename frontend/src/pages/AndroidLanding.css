@@ -1,0 +1,518 @@
+/* Landing page for the ViMusic Android app.
+   Scoped under .al so nothing here can leak into the player app, which is
+   Tailwind-driven and shares the same document. */
+
+.al {
+  /* Sampled from the app's own screenshots rather than invented: the
+     near-black is very slightly green-shifted, and the teal is the
+     Audio/Video pill from the player screen. */
+  --ink: #0b0e0c;
+  --ink-raised: #141a16;
+  --line: #1f2823;
+  --green: #3ddc84;
+  --green-deep: #0f7a45;
+  --teal: #58a9a0;
+  --bone: #e9e7e2;
+  --mute: #8b938c;
+
+  --display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --rail: 68px;
+
+  /* Screenshots are 9:20, so height is the binding constraint on laptops
+     and short windows. Deriving the width from vh as well as vw keeps the
+     device fully on screen instead of running off the bottom. */
+  --phone-w: min(300px, 76vw, 30vh);
+  --phone-h: calc(var(--phone-w) * 20 / 9);
+
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--body);
+  min-height: 100vh;
+  /* `clip` rather than `hidden`: hidden makes this a scroll container, which
+     silently kills position:sticky on the phone further down the page. */
+  overflow-x: clip;
+}
+
+.al *,
+.al *::before,
+.al *::after { box-sizing: border-box; }
+
+.al a { color: inherit; }
+
+.al :focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── The rail ──────────────────────────────────────────────────────────
+   The app navigates by a vertical column of rotated section names. This is
+   that same device, used as the page's scroll position indicator. */
+.al-rail {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.75rem;
+  z-index: 20;
+  background: var(--ink);
+}
+
+
+.al-rail button {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--mute);
+  transition: color 180ms ease;
+}
+
+.al-rail button[data-active='true'] { color: var(--bone); font-weight: 600; }
+.al-rail button:hover { color: var(--bone); }
+
+.al-main { margin-left: var(--rail); }
+
+.al-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────
+   Right-aligned display type, echoing the app's own screen headings. */
+.al-hero {
+  min-height: min(100vh, 780px);
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  gap: clamp(2rem, 5vw, 5rem);
+  /* Block longhand only: this element also carries .al-wrap, and a padding
+     shorthand here would wipe out its horizontal padding. */
+  padding-block: 7rem 5rem;
+}
+
+.al-hero h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.7rem, 6.2vw, 5.1rem);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0 0 1.4rem;
+  text-wrap: balance;
+}
+
+.al-hero p {
+  color: var(--mute);
+  font-size: clamp(1rem, 1.25vw, 1.13rem);
+  line-height: 1.65;
+  max-width: 46ch;
+  margin: 0 0 2.2rem;
+}
+
+.al-actions { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
+
+.al-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--green);
+  color: #06170e;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.95rem 1.6rem;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.al-cta:hover { background: #4ff096; transform: translateY(-2px); }
+
+.al-meta { color: var(--mute); font-size: 0.9rem; line-height: 1.5; }
+.al-meta a { color: var(--teal); text-decoration: none; border-bottom: 1px solid transparent; }
+.al-meta a:hover { border-bottom-color: var(--teal); }
+
+/* ── Phone ────────────────────────────────────────────────────────────
+   Screenshots are 720x1600, so the frame holds a 9:20 window. */
+.al-phone {
+  position: relative;
+  width: var(--phone-w);
+  aspect-ratio: 9 / 20;
+  margin-inline: auto;
+  border-radius: 34px;
+  padding: 9px;
+  background: linear-gradient(160deg, #262e29, #0e1310);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9), 0 0 0 1px var(--line);
+}
+
+.al-phone::after {
+  /* Speaker slot — enough to read as hardware without drawing a whole device. */
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.13);
+  z-index: 2;
+}
+
+.al-phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #0b0e0c;
+}
+
+.al-phone-screen img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+
+.al-phone-screen img[data-current='true'] { opacity: 1; }
+
+.al-glow {
+  position: absolute;
+  inset: -18% -30%;
+  background: radial-gradient(closest-side, rgba(61, 220, 132, 0.22), transparent 72%);
+  filter: blur(18px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ── Features ─────────────────────────────────────────────────────────── */
+.al-features { padding: clamp(4rem, 9vw, 8rem) 0; }
+
+.al-features-head {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+  letter-spacing: -0.03em;
+  margin: 0 0 3.5rem;
+  max-width: 22ch;
+  line-height: 1.08;
+}
+
+.al-features-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: clamp(2rem, 6vw, 5.5rem);
+  align-items: start;
+}
+
+.al-sticky {
+  position: sticky;
+  /* Vertically centred in the viewport, whatever the phone works out to. */
+  top: max(1.5rem, calc((100vh - var(--phone-h)) / 2));
+}
+
+.al-feature-list {
+  display: flex;
+  flex-direction: column;
+  /* Keeps the grid taller than the pinned phone through the final feature —
+     without it the phone unsticks just as the last screenshot appears. */
+  padding-bottom: 10vh;
+}
+
+.al-feature {
+  /* A full screen each, so one snap lands on exactly one feature and its
+     screenshot rather than leaving two half-visible. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(1.5rem, 3vh, 2.5rem) 0;
+}
+
+/* No dimmed/active treatment: a section fills the screen, so the one you can
+   see is always the current one. The rail carries position instead. */
+.al-feature h3 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(1.6rem, 2.8vw, 2.2rem);
+  letter-spacing: -0.025em;
+  margin: 0 0 0.8rem;
+  color: var(--bone);
+  max-width: 18ch;
+  line-height: 1.1;
+}
+
+.al-feature p {
+  margin: 0;
+  color: var(--mute);
+  line-height: 1.65;
+  max-width: 46ch;
+  font-size: clamp(1rem, 1.15vw, 1.1rem);
+}
+
+/* ── Download ─────────────────────────────────────────────────────────── */
+/* The last screen: download block plus footer, together. Keeping them in one
+   snap target is what stops the pager parking on the download section and
+   leaving the footer stranded below the fold on shorter laptops. */
+.al-end {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.al-download {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-top: 1px solid var(--line);
+  padding: clamp(2rem, 6vh, 5rem) 0;
+  background:
+    radial-gradient(60% 120% at 50% 0%, rgba(15, 122, 69, 0.22), transparent 70%),
+    var(--ink);
+  text-align: center;
+}
+
+/* Height-aware so the whole screen — heading, steps and footer — still fits
+   on a short laptop, where fixed sizing pushed the footer past the fold. */
+.al-download h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.9rem, min(4.4vw, 5.6vh), 3.4rem);
+  letter-spacing: -0.03em;
+  margin: 0 0 clamp(0.6rem, 1.4vh, 1rem);
+}
+
+.al-download p {
+  color: var(--mute);
+  max-width: 48ch;
+  margin: 0 auto clamp(1.3rem, 3vh, 2.3rem);
+  line-height: 1.6;
+  font-size: clamp(0.95rem, 1.9vh, 1.05rem);
+}
+
+.al-steps {
+  display: flex;
+  justify-content: center;
+  gap: clamp(1rem, 4vw, 3rem);
+  flex-wrap: wrap;
+  margin-top: clamp(1.5rem, 3.6vh, 3rem);
+  color: var(--mute);
+  font-size: clamp(0.83rem, 1.7vh, 0.9rem);
+  line-height: 1.5;
+}
+
+.al-steps li { list-style: none; max-width: 24ch; }
+.al-steps b { color: var(--bone); font-weight: 600; display: block; margin-bottom: 0.25rem; }
+.al-steps ol, .al-steps ul { margin: 0; padding: 0; }
+
+.al-foot {
+  margin-top: auto;
+  /* It's a flex item of .al-end now, and .al-wrap's `margin: 0 auto` would
+     otherwise cancel the stretch and shrink it to its own content width. */
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-block: 2.2rem 3rem;
+  color: var(--mute);
+  font-size: 0.88rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.al-foot a { color: var(--teal); text-decoration: none; }
+
+/* Mobile-only pinned copy — see AndroidLanding.jsx. */
+.al-pinned-copy { display: none; }
+
+.al-foot-credits { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.al-foot-credits > span + span::before { content: '·'; margin-right: 0.5rem; }
+.al-foot a:hover { text-decoration: underline; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .al {
+    --rail: 0px;
+    /* Sized to leave a band under the pinned phone for its copy — the copy
+       is pinned too, so this split is fixed rather than something the user
+       scrolls through. */
+    --phone-w: min(250px, 60vw, 26vh);
+  }
+  .al-rail { display: none; }
+
+  /* Hero is one screen of type: the phone is dropped here because the
+     feature sections that follow are built around it, and stacking both
+     copy and a device pushed the whole hero past a single screen. */
+  .al-hero {
+    grid-template-columns: 1fr;
+    align-content: center;
+    text-align: center;
+    min-height: 100vh;
+    padding-block: 4rem 2.5rem;
+    gap: 0;
+  }
+  .al-hero-visual { display: none; }
+
+  /* Without the device beside it the hero is pure type, so it has to carry
+     the screen on its own — at desktop sizing it filled barely half of a
+     phone and the rest read as dead space. */
+  /* Sized against height as well as width: on a tall phone a purely
+     width-based scale leaves the bottom third of the screen empty. */
+  .al-hero h1 {
+    font-size: clamp(2.9rem, max(12.5vw, 6.6vh), 4.2rem);
+    line-height: 0.98;
+    margin-bottom: clamp(1.2rem, 2.6vh, 2.2rem);
+  }
+
+  .al-hero p {
+    margin: 0 auto clamp(1.8rem, 4.2vh, 3.4rem);
+    font-size: clamp(1rem, 2vh, 1.2rem);
+    line-height: 1.6;
+    max-width: 32ch;
+  }
+
+  .al-actions { justify-content: center; gap: clamp(1rem, 2.4vh, 1.8rem); }
+  .al-cta {
+    padding: clamp(0.95rem, 1.9vh, 1.25rem) clamp(1.7rem, 6vw, 2.2rem);
+    font-size: clamp(1rem, 1.9vh, 1.1rem);
+  }
+  .al-meta { text-align: center; font-size: clamp(0.88rem, 1.6vh, 1rem); }
+
+  /* Same pinned-phone scrollytelling as desktop, stacked: the device holds
+     the upper half of the screen while each feature's copy arrives beneath
+     it and the screenshot swaps. */
+  .al-features { padding: 0; }
+  .al-features-head { display: none; }
+  .al-features-grid { grid-template-columns: 1fr; gap: 0; }
+
+  .al-sticky {
+    display: block;
+    top: 7vh;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .al-feature-list { padding-bottom: 0; }
+
+  /* The feature blocks become pure scroll distance here: they drive the
+     triggers and the pager, while the phone and the copy both stay pinned
+     and swap their contents. Previously the copy scrolled up behind the
+     phone on its way past. */
+  .al-feature {
+    min-height: 100vh;
+    padding: 0;
+    border-top: none;
+  }
+
+  .al-feature > * { display: none; }
+
+  .al-pinned-copy {
+    display: block;
+    position: relative;
+    margin-top: 1.5rem;
+    /* Fixed height so the swap can't shift the layout as copy length varies. */
+    height: calc(100vh - 7vh - var(--phone-h) - 6rem);
+    text-align: center;
+  }
+
+  .al-pinned-item {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 400ms ease;
+    pointer-events: none;
+  }
+
+  .al-pinned-item[data-current='true'] { opacity: 1; }
+
+  .al-pinned-item h3 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(1.35rem, 5.2vw, 1.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    color: var(--bone);
+    margin: 0 auto 0.7rem;
+    max-width: 20ch;
+    text-wrap: balance;
+  }
+
+  .al-pinned-item p {
+    margin: 0 auto;
+    color: var(--mute);
+    line-height: 1.6;
+    font-size: 0.97rem;
+    max-width: 34ch;
+  }
+
+  .al-foot { flex-direction: column; align-items: center; text-align: center; }
+  .al-foot-credits { flex-direction: column; gap: 0.35rem; align-items: center; }
+  .al-foot-credits > span + span::before { content: none; margin-right: 0; }
+
+  .al-download { text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .al * { animation: none !important; transition: none !important; }
+}
+
+/* ── Badge ────────────────────────────────────────────────────────────
+   Sits opposite the rail's "Vi" mark, and carries the version so the
+   download below is unambiguous about what you're getting. */
+.al-badge {
+  position: fixed;
+  top: 1.1rem;
+  right: 1.1rem;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(11, 14, 12, 0.82);
+  backdrop-filter: blur(8px);
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 0.86rem;
+  letter-spacing: -0.01em;
+  color: var(--bone);
+  text-decoration: none;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.al-badge:hover { border-color: var(--green); }
+.al-badge em { font-style: normal; color: var(--mute); font-size: 0.8rem; }
+
+.al-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(61, 220, 132, 0.16);
+}
+
+@media (max-width: 520px) {
+  .al-badge { top: 0.75rem; right: 0.75rem; padding: 0.38rem 0.7rem; font-size: 0.8rem; }
+  .al-badge em { display: none; }
+}

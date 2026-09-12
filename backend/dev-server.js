@@ -56,12 +56,14 @@ import importDatabaseHandler from "./api/import-database/[email].js";
 import exportDatabaseHandler from "./api/export-database/[email].js";
 import loginHandler from "./api/login/[email].js";
 import logoutHandler from "./api/logout/[email].js";
+import searchHistoryHandler from "./api/search-history.js";
 
 // ── Mount the exact same URLs as Vercel ───────────────────────────────────
 app.all("/api/health", adaptVercelHandler(healthHandler));
 app.all("/api/playlists", adaptVercelHandler(playlistsHandler));
 app.all("/api/songs", adaptVercelHandler(songsHandler));
 app.all("/api/favorites", adaptVercelHandler(favoritesHandler));
+app.all("/api/search-history", adaptVercelHandler(searchHistoryHandler));
 
 app.all("/api/songs/:songId/playlists", injectQuery(songPlaylistsHandler));
 app.all("/api/songs/:songId/favorite", injectQuery(songFavoriteHandler));

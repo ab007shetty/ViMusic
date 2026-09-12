@@ -40,12 +40,24 @@ export default async function handler(req, res) {
   // GET /api/playlists/:id/songs
   // ─────────────────────────────────────────────────────────────────────────
   if (req.method === "GET" && isSongsRoute && !songId) {
+    // Page through the playlist instead of returning it whole — position
+    // order comes from the map table, so pagination happens there and the
+    // song rows for just that page are fetched afterward.
+    //
+    // Newest-added first, matching every other view (favorites by likedAt,
+    // recently played by lastPlayedAt). Ascending order put the most
+    // recently added song at the very end, which with 20-per-page paging
+    // meant it wasn't on screen at all until you scrolled to the last page.
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
     try {
       let query = supabase
         .from("song_playlist_map")
         .select("song_id, position")
         .eq("playlist_id", playlistId)
-        .order("position", { ascending: true });
+        .order("position", { ascending: false })
+        .range(offset, offset + limit - 1);
 
       query = query.eq("user_id", userId);
 
@@ -53,11 +65,11 @@ export default async function handler(req, res) {
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        return res.json({ songs: [] });
+        return res.json({ songs: [], hasMore: false });
       }
 
       const songIds = data.map((row) => row.song_id);
-      
+
       // Fetch songs manually since there is no foreign key setup for composite PKs
       const { data: songsData, error: songsErr } = await supabase
         .from("song")
@@ -67,12 +79,16 @@ export default async function handler(req, res) {
 
       if (songsErr) throw songsErr;
 
-      // Preserve the position ordering from the map
+      // Preserve the position ordering from the map, and carry `position`
+      // through so the client can sort by "when it was added to this
+      // playlist" — nothing on the song row itself records that.
       const songsById = {};
       songsData.forEach(s => songsById[s.id] = s);
-      const songs = data.map(row => songsById[row.song_id]).filter(Boolean);
+      const songs = data
+        .map((row) => (songsById[row.song_id] ? { ...songsById[row.song_id], position: row.position } : null))
+        .filter(Boolean);
 
-      return res.json({ songs });
+      return res.json({ songs, hasMore: data.length === limit });
     } catch (error) {
       console.error("Error fetching playlist songs:", error);
       return res.status(500).json({ error: "Failed to fetch playlist songs" });
@@ -170,18 +186,25 @@ export default async function handler(req, res) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PUT /api/playlists/:id  - rename
+  // PUT /api/playlists/:id  - rename and/or set cover art
   // ─────────────────────────────────────────────────────────────────────────
   if (req.method === "PUT" && !isSongsRoute) {
-    const { name } = req.body || {};
-    if (!name || !name.trim()) {
+    const { name, coverUrl } = req.body || {};
+    if (name !== undefined && !name.trim()) {
       return res.status(400).json({ error: "Playlist name is required" });
     }
+    if (name === undefined && coverUrl === undefined) {
+      return res.status(400).json({ error: "Nothing to update" });
+    }
+
+    const updates = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (coverUrl !== undefined) updates.coverUrl = coverUrl || null;
 
     try {
       let query = supabase
         .from("playlist")
-        .update({ name: name.trim() })
+        .update(updates)
         .eq("id", playlistId);
       query = query.eq("user_id", userId);
 

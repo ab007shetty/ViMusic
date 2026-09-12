@@ -1,24 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Heart, Plus, ExternalLink, Play, X } from 'lucide-react';
+import { Heart, Plus, ExternalLink, Play, X, ImagePlus } from 'lucide-react';
 import { fetchFromServer, isLoggedIn } from '../utils/api';
+import { thumbnailFor, handleThumbnailError, handleThumbnailLoad } from '../utils/thumbnails';
 import { usePlayer } from '../contexts/PlayerContext';
 import toast from 'react-hot-toast';
 
-const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
+const SongCard = ({ song, onToggleFavorite, songs = [], priority = false, onSetAsCover, isFavorite: isFavoriteProp }) => {
   const { playSong, playQueue, addToQueue } = usePlayer();
   const [showPlaylists, setShowPlaylists] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [songPlaylists, setSongPlaylists] = useState([]);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showControls, setShowControls] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const playlistRef = useRef(null);
   const cardRef = useRef(null);
   const plusBtnRef = useRef(null);
   const imgRef = useRef(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
 
-  const enhancedThumbnailUrl = song.thumbnailUrl?.replace(/w60-h60/, 'w544-h544') || '/images/default.jpg';
+  const enhancedThumbnailUrl = thumbnailFor(song.thumbnailUrl, 'card');
 
   // Set as a raw DOM property instead of a JSX prop — this React version's
   // prop whitelist doesn't recognize fetchPriority yet, so passing it as
@@ -30,9 +32,16 @@ const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
     }
   }, [priority]);
 
+  // likedAt only exists on rows that came from our own database. A YouTube
+  // search result has none, so it would always read as un-favorited — the
+  // parent passes the answer in instead, from the set of favorited ids.
   useEffect(() => {
-    setIsFavorite(song.likedAt !== null && song.likedAt !== undefined);
-  }, [song]);
+    setIsFavorite(
+      isFavoriteProp !== undefined
+        ? isFavoriteProp
+        : song.likedAt !== null && song.likedAt !== undefined
+    );
+  }, [song, isFavoriteProp]);
 
   // Close playlist dropdown when clicking outside or scrolling
   useEffect(() => {
@@ -230,15 +239,24 @@ const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
       onClick={handleCardClick}
     >
       <div className="relative">
+        {/* Holds the exact space the artwork will occupy. Full-resolution
+            thumbnails are 55KB-300KB, so without this a card that hasn't
+            finished loading reads as an empty hole in the middle of the
+            grid while the ones below it are already painted. */}
+        {!imgLoaded && (
+          <div className="absolute inset-0 rounded bg-gray-700/40 animate-pulse" />
+        )}
         <img
           ref={imgRef}
           src={enhancedThumbnailUrl}
           alt={song.title}
+          onError={(e) => { if (!handleThumbnailError(e)) setImgLoaded(true); }}
+          onLoad={(e) => { if (!handleThumbnailLoad(e)) setImgLoaded(true); }}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
-          className="w-full h-32 sm:h-48 md:h-56 object-cover rounded transition-all duration-300 group-hover:brightness-75"
+          className={`w-full h-32 sm:h-48 md:h-56 object-cover rounded transition-all duration-300 group-hover:brightness-75 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
         />
-        
+
         {/* Gradient Overlay */}
         <div className={`absolute inset-0 bg-gradient-to-t from-black/60 to-transparent transition-opacity duration-300 rounded-lg ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
 
@@ -366,14 +384,29 @@ const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
           </div>
         )}
 
-        {/* External Link */}
-        <button
-          onClick={openInPlatform}
-          className={`absolute top-2 right-2 p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-all ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-          title={song.source === 'youtube' ? 'Open in YouTube' : 'Open in YouTube Music'}
-        >
-          <ExternalLink size={18} className="text-white" />
-        </button>
+        {/* Right-side stack: open externally, then set-as-cover beneath it */}
+        <div className={`absolute top-2 right-2 flex flex-col items-end space-y-2 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <button
+            onClick={openInPlatform}
+            className="p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-transform"
+            title={song.source === 'youtube' ? 'Open in YouTube' : 'Open in YouTube Music'}
+          >
+            <ExternalLink size={18} className="text-white" />
+          </button>
+
+          {onSetAsCover && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetAsCover();
+              }}
+              className="p-2 bg-black/70 backdrop-blur-sm rounded-full hover:scale-110 transition-transform"
+              title="Set as playlist cover"
+            >
+              <ImagePlus size={18} className="text-white" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Song Info */}
@@ -385,7 +418,10 @@ const SongCard = ({ song, onToggleFavorite, songs = [], priority = false }) => {
           <p className="text-gray-400 truncate flex-1">
             {song.artistsText || 'Unknown Artist'}
           </p>
-          {song.durationText && (
+          {/* Songs synced from the Android app sometimes carry a YouTube
+              Music play count here ("869M plays") instead of a running
+              time, so only render it when it actually is one. */}
+          {/^\d+:\d{2}(:\d{2})?$/.test(song.durationText || '') && (
             <span className="text-gray-500 ml-2">{song.durationText}</span>
           )}
         </div>

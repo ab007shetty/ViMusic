@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
+import { thumbnailFor, handleThumbnailError, handleThumbnailLoad } from '../utils/thumbnails';
 
 const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete, isReadOnly }) => {
   const [showActions, setShowActions] = useState(false);
@@ -30,13 +31,24 @@ const PlaylistCard = ({ playlist, onClick, isActive, onEdit, onDelete, isReadOnl
       `}
     >
       <div className="relative overflow-hidden rounded-lg md:rounded-xl">
-        <img
-          src={playlist.thumbnailUrl}
-          alt={playlist.name}
-          loading="lazy"
-          decoding="async"
-          className="w-full aspect-square md:h-32 md:aspect-auto object-cover transition-transform duration-300 md:hover:scale-110"
-        />
+        {playlist.thumbnailUrl ? (
+          <img
+            src={thumbnailFor(playlist.thumbnailUrl, 'card')}
+            alt={playlist.name}
+            onError={handleThumbnailError}
+            onLoad={handleThumbnailLoad}
+            loading="lazy"
+            decoding="async"
+            className="w-full aspect-square md:h-32 md:aspect-auto object-cover transition-transform duration-300 md:hover:scale-110"
+          />
+        ) : (
+          // An empty playlist has no song artwork to borrow yet.
+          <div className="w-full aspect-square md:h-32 md:aspect-auto flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
+            <span className="text-white/80 font-bold text-lg md:text-3xl">
+              {playlist.name?.trim()?.charAt(0)?.toUpperCase() || '♪'}
+            </span>
+          </div>
+        )}
       </div>
       
       <div className="flex items-center justify-between mt-1 md:mt-3 gap-2">

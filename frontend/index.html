@@ -6,33 +6,39 @@
 
     <!-- Connections established early so the actual requests (made once a
          song loads/plays) don't pay the DNS+TLS+TCP setup cost on top of
-         the request itself. -->
-    <link rel="preconnect" href="https://www.youtube.com" />
-    <link rel="preconnect" href="https://i.ytimg.com" />
+         the request itself. i.ytimg.com and lh3 serve every thumbnail, so
+         they're contacted before the first paint finishes. -->
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="preconnect" href="https://lh3.googleusercontent.com" crossorigin />
     <link rel="preconnect" href="https://www.googleapis.com" />
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <!-- Only contacted once playback actually starts, so resolve DNS early
+         without holding a connection open for them up front. -->
+    <link rel="dns-prefetch" href="https://s.ytimg.com" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111827" />
     <title>ViMusic – Free Online Music &amp; Video Player</title>
     <meta name="description" content="ViMusic is a free web music player: search and stream any song or video, build playlists, favorite tracks, and pick up your listening history across devices. No installs, sign in with Google." />
     <meta name="keywords" content="music player, online music player, free music streaming, web music player, playlist maker, video player, stream music online" />
-    <meta name="robots" content="index, follow" />
-    <!-- TODO: once this is deployed to its real domain, add:
-         <link rel="canonical" href="https://YOUR-ACTUAL-DOMAIN/" />
-         and set og:url below to the same address. Left out rather than
-         guessed — a wrong canonical URL actively hurts SEO instead of
-         helping it. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://vimusic.vercel.app/" />
 
-    <!-- Open Graph / social link previews -->
+    <!-- Open Graph / social link previews. These must be absolute URLs —
+         crawlers don't resolve site-relative paths. -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ViMusic" />
+    <meta property="og:url" content="https://vimusic.vercel.app/" />
     <meta property="og:title" content="ViMusic – Free Online Music & Video Player" />
     <meta property="og:description" content="Search, stream, and organize music and videos for free — playlists, favorites, and listening history, right in your browser." />
-    <meta property="og:image" content="/images/default.jpg" />
+    <meta property="og:image" content="https://vimusic.vercel.app/images/default.jpg" />
+    <meta property="og:image:alt" content="ViMusic – free online music and video player" />
 
     <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ViMusic – Free Online Music & Video Player" />
     <meta name="twitter:description" content="Search, stream, and organize music and videos for free — playlists, favorites, and listening history, right in your browser." />
-    <meta name="twitter:image" content="/images/default.jpg" />
+    <meta name="twitter:image" content="https://vimusic.vercel.app/images/default.jpg" />
 
     <!-- Structured data: helps search engines understand this is a music
          player web app, which is what "music player" searchers are after. -->
@@ -41,9 +47,19 @@
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "ViMusic",
+        "url": "https://vimusic.vercel.app/",
         "applicationCategory": "MusicApplication",
         "operatingSystem": "Any (Web Browser)",
+        "browserRequirements": "Requires JavaScript",
         "description": "A free web-based music and video player with search, playlists, favorites, and cross-device listening history.",
+        "screenshot": "https://vimusic.vercel.app/images/default.jpg",
+        "featureList": [
+          "Search and stream any song or video",
+          "Create and manage playlists",
+          "Favorite tracks",
+          "Most played and recently played history",
+          "Synced search history across devices"
+        ],
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -54,6 +70,16 @@
   </head>
   <body class="bg-gray-900 text-white">
     <div id="root"></div>
+    <!-- Crawlers that don't execute JS, and users with it disabled, would
+         otherwise see a blank page and nothing to index. -->
+    <noscript>
+      <h1>ViMusic – Free Online Music &amp; Video Player</h1>
+      <p>
+        ViMusic is a free web-based music player. Search and stream any song or
+        video, build playlists, favorite tracks, and keep your listening history
+        across devices. JavaScript is required to run the player.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
