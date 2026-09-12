@@ -30,6 +30,7 @@
   color: var(--bone);
   font-family: var(--body);
   min-height: 100vh;
+  min-height: 100svh;
   /* `clip` rather than `hidden`: hidden makes this a scroll container, which
      silently kills position:sticky on the phone further down the page. */
   overflow-x: clip;
@@ -96,6 +97,7 @@
    Right-aligned display type, echoing the app's own screen headings. */
 .al-hero {
   min-height: min(100vh, 780px);
+  min-height: min(100svh, 780px);
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   align-items: center;
@@ -225,6 +227,7 @@
   position: sticky;
   /* Vertically centred in the viewport, whatever the phone works out to. */
   top: max(1.5rem, calc((100vh - var(--phone-h)) / 2));
+  top: max(1.5rem, calc((100svh - var(--phone-h)) / 2));
 }
 
 .al-feature-list {
@@ -239,6 +242,7 @@
   /* A full screen each, so one snap lands on exactly one feature and its
      screenshot rather than leaving two half-visible. */
   min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -272,6 +276,7 @@
    leaving the footer stranded below the fold on shorter laptops. */
 .al-end {
   min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
 }
@@ -365,6 +370,7 @@
     align-content: center;
     text-align: center;
     min-height: 100vh;
+    min-height: 100svh;
     padding-block: 4rem 2.5rem;
     gap: 0;
   }
@@ -417,6 +423,7 @@
      phone on its way past. */
   .al-feature {
     min-height: 100vh;
+    min-height: 100svh;
     padding: 0;
     border-top: none;
   }
@@ -429,6 +436,7 @@
     margin-top: 1.5rem;
     /* Fixed height so the swap can't shift the layout as copy length varies. */
     height: calc(100vh - 7vh - var(--phone-h) - 6rem);
+    height: calc(100svh - 7svh - var(--phone-h) - 6rem);
     text-align: center;
   }
 
@@ -485,10 +493,32 @@
     align-items: center;
     text-align: center;
     gap: 0.3rem;
-    padding-block: clamp(1rem, 2.2vh, 1.8rem) clamp(1.1rem, 2.4vh, 2rem);
+    /* Extra bottom room for a gesture bar or notch cut-out. */
+    padding-block: clamp(1rem, 2.2vh, 1.8rem)
+      calc(clamp(1.1rem, 2.4vh, 2rem) + env(safe-area-inset-bottom, 0px));
   }
 
   .al-download { text-align: center; }
+}
+
+/* Very short visible viewports — a small phone whose browser UI and system
+   nav bar together eat 100px+ of the screen. The regular clamps bottom out
+   above what fits here, so the type and spacing step down once more; without
+   it the hero and the download screen overflow and the pager, which snaps to
+   section tops, leaves the overflow permanently out of reach. */
+@media (max-width: 900px) and (max-height: 620px) {
+  .al-hero { padding-block: 2.25rem 1.25rem; }
+  .al-hero h1 { font-size: clamp(1.9rem, 8.5vw, 2.5rem); margin-bottom: 0.7rem; }
+  .al-hero p { font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.15rem; max-width: 34ch; }
+  .al-actions { gap: 0.7rem; }
+  .al-cta { padding: 0.7rem 1.35rem; font-size: 0.92rem; }
+  .al-meta { font-size: 0.78rem; }
+
+  .al-download { padding: 1rem 0; }
+  .al-download h2 { font-size: 1.55rem; margin-bottom: 0.4rem; }
+  .al-download p { font-size: 0.85rem; margin-bottom: 0.9rem; }
+  .al-steps { font-size: 0.68rem; gap: 0.55rem 0.75rem; margin-top: 0.75rem; }
+  .al-foot { font-size: 0.78rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
