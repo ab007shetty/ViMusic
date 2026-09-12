@@ -131,13 +131,16 @@ const AndroidLanding = () => {
         index = target;
         busy = true;
         lenis.scrollTo(sections[index], {
-          duration: 0.9,
+          duration: 0.55,
           easing: (t) => 1 - Math.pow(1 - t, 3),
           lock: true,
           onComplete: () => {
-            // Short cooldown so the tail of a trackpad flick doesn't
-            // immediately count as a second gesture.
-            window.setTimeout(() => { busy = false; }, 140);
+            // Just enough cooldown that the tail of a trackpad flick doesn't
+            // count as a second gesture. Kept short: while this window is
+            // open every swipe is discarded, and at 0.9s + 140ms a normal
+            // swiping rhythm lost roughly every other gesture, which felt
+            // like needing two swipes to move one screen.
+            window.setTimeout(() => { busy = false; }, 60);
           },
         });
       };
@@ -168,7 +171,7 @@ const AndroidLanding = () => {
       const onTouchEnd = (e) => {
         if (busy) return;
         const travelled = touchStartY - e.changedTouches[0].clientY;
-        if (Math.abs(travelled) < 40) return; // a tap or a stray nudge
+        if (Math.abs(travelled) < 28) return; // a tap or a stray nudge
         goTo(index + (travelled > 0 ? 1 : -1));
       };
 
@@ -374,20 +377,16 @@ const AndroidLanding = () => {
         </section>
 
           <footer className="al-foot al-wrap">
-          <span className="al-foot-credits">
-            <span>Inspired by <a href="https://github.com/vfsfitvnm/ViMusic" target="_blank" rel="noopener noreferrer">vfsfitvnm/ViMusic</a></span>
-            <span>Lyrics by <a href="https://lrclib.net" target="_blank" rel="noopener noreferrer">LRCLIB</a></span>
-          </span>
-          <span className="al-foot-made">
-            Made with ❤️ by{' '}
-            <a href={AUTHOR_URL} target="_blank" rel="noopener noreferrer">abshetty</a>
-          </span>
+            <span className="al-foot-made">
+              Made with ❤️ by{' '}
+              <a href={AUTHOR_URL} target="_blank" rel="noopener noreferrer">abshetty</a>
+            </span>
 
-          <span>
-            <a href={WEB_APP_URL}>Web app</a>
-            {' · '}
-            <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">Source</a>
-          </span>
+            <span>
+              <a href={WEB_APP_URL}>Web app</a>
+              {' · '}
+              <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">Source</a>
+            </span>
           </footer>
         </div>
       </main>

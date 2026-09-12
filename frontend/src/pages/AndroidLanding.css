@@ -344,8 +344,6 @@
 /* Mobile-only pinned copy — see AndroidLanding.jsx. */
 .al-pinned-copy { display: none; }
 
-.al-foot-credits { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.al-foot-credits > span + span::before { content: '·'; margin-right: 0.5rem; }
 .al-foot a:hover { text-decoration: underline; }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
@@ -467,9 +465,28 @@
     max-width: 34ch;
   }
 
-  .al-foot { flex-direction: column; align-items: center; text-align: center; }
-  .al-foot-credits { flex-direction: column; gap: 0.35rem; align-items: center; }
-  .al-foot-credits > span + span::before { content: none; margin-right: 0; }
+  /* The final screen is a snap target, so everything on it — download block
+     and footer — has to fit one viewport or the pager parks at its top and
+     strands the footer below the fold with no way to scroll to it. Four
+     stacked steps alone cost ~400px, so they pair up instead. */
+  .al-download { padding: clamp(1.25rem, 3vh, 2.5rem) 0; }
+
+  .al-steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(0.8rem, 2vh, 1.4rem) 1rem;
+    margin-top: clamp(1rem, 2.4vh, 2rem);
+    font-size: clamp(0.72rem, 1.5vh, 0.84rem);
+  }
+  .al-steps li { max-width: none; }
+
+  .al-foot {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.3rem;
+    padding-block: clamp(1rem, 2.2vh, 1.8rem) clamp(1.1rem, 2.4vh, 2rem);
+  }
 
   .al-download { text-align: center; }
 }
