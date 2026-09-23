@@ -62,6 +62,10 @@ both server-side filters and RLS policies: remove either one and a client breaks
 - **Real-time sync** — favorites, playlists, playlist contents and search history propagate
   between the website and the Android app over Supabase Realtime, with no refresh and no loading
   skeleton. Only genuinely-new cards animate in; everything already on screen is left untouched.
+- **Lyrics** — click the artwork in the maximized player to flip it to lyrics. Time-synced lines
+  highlight and scroll themselves; untimed lyrics render as plain text. Sourced from
+  [LRCLIB](https://lrclib.net) and cached in the shared `lyrics` table, so a track already fetched
+  on the Android app opens instantly here, and vice versa.
 - **Search** — YouTube search with infinite scroll, or paste a YouTube / YouTube Music / Shorts URL
   to play a single track directly.
 - **Synced search history** — the last searches follow you between devices; the 5 most recent are
@@ -98,6 +102,7 @@ both server-side filters and RLS policies: remove either one and a client breaks
 | **YouTube IFrame Player API** | All playback. Loaded from `www.youtube.com`, controlled via `loadVideoById` / `playVideo` / `seekTo`. |
 | **YouTube Data API v3** — `/search` | Keyword search (20 results/page, paged by `pageToken`). |
 | **YouTube Data API v3** — `/videos` | Track durations and pasted-URL metadata. `/search` does **not** return duration, so results are enriched with one batched `/videos` call (up to 50 ids per request). |
+| **LRCLIB** — `/api/get`, `/api/search` | Time-synced and plain lyrics. Called server-side only, so it stays out of the frontend's CSP. |
 | **Supabase Auth** | Google OAuth, with `prompt: select_account` so the account chooser always appears. |
 | **Supabase Realtime** | `postgres_changes` on `song`, `playlist`, `song_playlist_map`, `search_history`, filtered per user. |
 | **MediaSession API** | Lock-screen / notification metadata, artwork and transport controls. |
@@ -120,6 +125,7 @@ locally with Express. Identity comes from the `X-User-Email` header (absent ⇒ 
 | `PUT` | `/songs/:songId/favorite` | Toggle favorite (upserts the song row) |
 | `POST` | `/songs/:songId/play` | Add listening time; calls the `increment_play_time` RPC |
 | `GET` | `/songs/:songId/playlists` | Which playlists contain this song |
+| `GET` | `/songs/:songId/lyrics?title=&artist=&duration=` | Synced or plain lyrics, from cache or LRCLIB |
 | `GET`/`POST` | `/playlists` | List (with derived covers) / create |
 | `PUT`/`DELETE` | `/playlists/:id` | Rename and/or set `coverUrl` / delete |
 | `GET` | `/playlists/:id/songs?limit=&offset=` | Songs in a playlist, in position order |

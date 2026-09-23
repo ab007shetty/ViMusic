@@ -61,8 +61,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2.75rem;
+  /* The labels span the rail top to bottom rather than sitting in a block in
+     the middle, so the spacing absorbs a change in how many there are instead
+     of a fixed gap forcing the longer ones to wrap. The gap is only a floor
+     for short screens; on a tall one the free space is shared out between
+     them. */
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding-block: clamp(1.5rem, 5vh, 3rem);
   z-index: 20;
   background: var(--ink);
 }
@@ -80,6 +86,9 @@
   letter-spacing: 0.04em;
   color: var(--mute);
   transition: color 180ms ease;
+  /* In vertical writing mode a wrap stacks the label into two side-by-side
+     columns rather than two rows — never what we want here. */
+  white-space: nowrap;
 }
 
 .al-rail button[data-active='true'] { color: var(--bone); font-weight: 600; }

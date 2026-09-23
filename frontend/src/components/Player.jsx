@@ -7,9 +7,10 @@ import { fetchFromServer, isLoggedIn, getUserEmail } from '../utils/api';
 import { thumbnailFor, handleThumbnailError, handleThumbnailLoad } from '../utils/thumbnails';
 import {
   Play, Pause, SkipForward, SkipBack, Volume2, VolumeX,
-  Shuffle, Repeat, Repeat1, X, Film, Music, ChevronDown, Maximize2, Subtitles, ListMusic
+  Shuffle, Repeat, Repeat1, X, Film, Music, ChevronDown, Maximize2, Subtitles, ListMusic, Mic2
 } from 'lucide-react';
 import QueuePanel from './QueuePanel';
+import LyricsPanel from './LyricsPanel';
 
 const Player = () => {
   const {
@@ -38,6 +39,7 @@ const Player = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const ytPlayerRef = useRef(null);
   const isPlayerReady = useRef(false);
   const updateIntervalRef = useRef(null);
@@ -485,20 +487,40 @@ const Player = () => {
           <div className={`close-on-click absolute inset-0 flex items-center justify-center p-4 transition-all duration-500 ${
             !isVideoMode ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-95 pointer-events-none'
           }`}>
+            {/* Clicking the artwork flips it to the lyrics, and back. */}
             <div
-              className="rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsLyricsOpen((open) => !open);
+              }}
+              className="group relative rounded-2xl shadow-2xl overflow-hidden cursor-pointer"
               style={{
                 height: '100%',
                 aspectRatio: '1',
                 maxWidth: '100%',
               }}
             >
-              <img 
+              <img
                 src={thumbnailFor(currentSong.thumbnailUrl, 'full')}
                 alt={currentSong.title}
                 onError={handleThumbnailError}
                 onLoad={handleThumbnailLoad}
                 className="w-full h-full object-cover"
+              />
+
+              {!isLyricsOpen && (
+                <div className="absolute inset-x-0 bottom-0 flex justify-center pb-4 pt-10 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-white/90">
+                    <Mic2 size={13} /> Tap for lyrics
+                  </span>
+                </div>
+              )}
+
+              <LyricsPanel
+                song={currentSong}
+                open={isLyricsOpen}
+                playerRef={playerRef}
+                onClose={() => setIsLyricsOpen(false)}
               />
             </div>
           </div>

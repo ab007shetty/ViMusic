@@ -8,9 +8,9 @@ gsap.registerPlugin(ScrollTrigger);
 
 // Direct APK so the download starts on click instead of landing people on a
 // releases page. Pinned to a version by nature — the app updates itself OTA.
-const APK_URL = 'https://github.com/ab007shetty/ViMusicAndroid/releases/download/v1.0.2/ViMusic-release-1.0.2.apk';
+const APK_URL = 'https://github.com/ab007shetty/ViMusicAndroid/releases/download/v1.0.3/ViMusic-release-1.0.3.apk';
 const RELEASES_URL = 'https://github.com/ab007shetty/ViMusicAndroid/releases/latest';
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const SOURCE_URL = 'https://github.com/ab007shetty/ViMusicAndroid';
 const WEB_APP_URL = 'https://vimusic.vercel.app/';
 const AUTHOR_URL = 'https://abshetty.com';
@@ -30,7 +30,7 @@ const FEATURES = [
     label: 'Lyrics',
     shot: '/images/lyrics.jpeg',
     title: 'Lyrics that keep time',
-    body: 'Synced line-by-line lyrics from LRCLIB, highlighting the line playing right now. Tap any line to jump there.',
+    body: 'Synced line-by-line lyrics from LRCLIB. The line playing right now is highlighted and the view follows along on its own.',
   },
   {
     id: 'video',
@@ -41,10 +41,17 @@ const FEATURES = [
   },
   {
     id: 'local',
-    label: 'Local files',
+    label: 'Local',
     shot: '/images/local.jpeg',
     title: 'Files already on your phone',
     body: 'Point it at a folder and your local tracks sit in the same library as everything else, with the same search and sorting.',
+  },
+  {
+    id: 'equalizer',
+    label: 'Equalizer',
+    shot: '/images/equalizer.jpeg',
+    title: 'A real equalizer for local tracks',
+    body: 'Ten bands from 31Hz to 16kHz, presets, preamp, bass boost, stereo width and volume gain. It applies to songs playing from your own files.',
   },
   {
     id: 'favourites',
@@ -62,7 +69,7 @@ const FEATURES = [
   },
   {
     id: 'sync',
-    label: 'Web sync',
+    label: 'Web',
     shot: '/images/about.jpeg',
     title: 'The same library in a browser',
     body: 'Signing in is optional. Do it and your playlists, favourites and history show up on the web app too, updating as you go.',

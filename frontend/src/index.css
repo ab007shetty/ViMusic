@@ -95,3 +95,15 @@
     animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
+@layer utilities {
+  /* The lyrics overlay sits on blurred artwork, where the global 10px dark
+     scrollbar would cut a hard grey stripe down the side. */
+  .lyrics-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .lyrics-scroll {
+    scrollbar-width: none;
+  }
+}

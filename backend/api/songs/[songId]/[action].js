@@ -2,6 +2,7 @@ import { handlePreflight } from "../../../lib/auth.js";
 import favorite from "../../../lib/song-favorite.js";
 import play from "../../../lib/song-play.js";
 import playlists from "../../../lib/song-playlists.js";
+import lyrics from "../../../lib/song-lyrics.js";
 
 /**
  * Dispatches /api/songs/:songId/:action
@@ -9,13 +10,15 @@ import playlists from "../../../lib/song-playlists.js";
  *   PUT    /api/songs/:songId/favorite   → toggle like
  *   POST   /api/songs/:songId/play       → add listening time
  *   GET    /api/songs/:songId/playlists  → playlists containing this song
+ *   GET    /api/songs/:songId/lyrics     → LRCLIB lyrics (cached in Postgres)
  *
- * These were three separate files, which Vercel counts as three separate
- * serverless functions. The Hobby plan allows 12 per deployment and this
- * backend had 13, so they share one dynamic route instead. The handlers
- * themselves live in lib/ — only files under api/ count toward the limit.
+ * These were separate files, which Vercel counts as separate serverless
+ * functions. The Hobby plan allows 12 per deployment and this backend had 13,
+ * so they share one dynamic route instead. The handlers themselves live in
+ * lib/ — only files under api/ count toward the limit, so adding an action
+ * here is free.
  */
-const ACTIONS = { favorite, play, playlists };
+const ACTIONS = { favorite, play, playlists, lyrics };
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
